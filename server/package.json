@@ -7,13 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "dev:watch": "nodemon src/index.ts",
-    "test:queue": "ts-node src/utils/sampleEnqueue.ts",
-    "test:github": "ts-node src/utils/test-github.ts",
-    "test:ai": "ts-node src/utils/test-ai.ts",
-    "test:github-post": "ts-node src/utils/test-github-post.ts",
-    "test:diff-mapping": "ts-node src/utils/test-diff-mapping.ts",
-    "check:pem": "ts-node src/utils/check-pem.ts"
+    "dev:watch": "nodemon src/index.ts"
   },
   "dependencies": {
     "@types/mongoose": "^5.11.96",
