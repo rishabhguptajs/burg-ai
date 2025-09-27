@@ -334,6 +334,16 @@ playwright/.cache/
 *.sqlite
 *.sqlite3
 
+# Private keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.cer
+private-key*
+burg-ai-private-key*
+
 # Cache directories
 .cache/
 .parcel-cache/
