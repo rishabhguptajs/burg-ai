@@ -7,21 +7,34 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "dev:watch": "nodemon src/index.ts"
+    "dev:watch": "nodemon src/index.ts",
+    "test:queue": "ts-node src/utils/sampleEnqueue.ts",
+    "test:github": "ts-node src/utils/test-github.ts",
+    "test:ai": "ts-node src/utils/test-ai.ts",
+    "test:github-post": "ts-node src/utils/test-github-post.ts",
+    "test:diff-mapping": "ts-node src/utils/test-diff-mapping.ts",
+    "check:pem": "ts-node src/utils/check-pem.ts"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "@types/mongoose": "^5.11.96",
+    "axios": "^1.12.2",
+    "bullmq": "^5.58.9",
     "cors": "^2.8.5",
-    "helmet": "^7.1.0",
     "dotenv": "^16.3.1",
-    "joi": "^17.11.0"
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.18.2",
+    "octokit": "^5.0.3",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/cors": "^2.8.16",
+    "@types/express": "^4.17.21",
     "@types/node": "^20.9.0",
-    "typescript": "^5.2.2",
+    "nodemon": "^3.0.1",
     "ts-node": "^10.9.1",
-    "nodemon": "^3.0.1"
+    "typescript": "^5.2.2"
   }
 }
