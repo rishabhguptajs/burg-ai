@@ -19,24 +19,22 @@ class PRReviewQueue {
   private queueEvents: QueueEvents;
 
   constructor() {
-    // Initialize queue with Redis connection
     this.queue = new Queue<PRReviewJob>('pr-review-queue', {
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379'),
       },
       defaultJobOptions: {
-        removeOnComplete: 50, // Keep last 50 completed jobs
-        removeOnFail: 100,    // Keep last 100 failed jobs
-        attempts: 3,          // Max 3 attempts per job
+        removeOnComplete: 50,
+        removeOnFail: 100,  
+        attempts: 3,    
         backoff: {
           type: 'exponential',
-          delay: 2000,        // Initial delay 2 seconds
+          delay: 2000,     
         },
       },
     });
 
-    // Initialize worker
     this.worker = new Worker<PRReviewJob>(
       'pr-review-queue',
       this.processPRReviewJob.bind(this),
@@ -45,11 +43,10 @@ class PRReviewQueue {
           host: process.env.REDIS_HOST || 'localhost',
           port: parseInt(process.env.REDIS_PORT || '6379'),
         },
-        concurrency: 5, // Process up to 5 jobs concurrently
+        concurrency: 5,
       }
     );
 
-    // Initialize queue events for monitoring
     this.queueEvents = new QueueEvents('pr-review-queue', {
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
@@ -133,23 +130,19 @@ class PRReviewQueue {
     const { installationId, repoFullName, prNumber, headSha, action } = data;
 
     try {
-      // Import the GitHub service
       const { processPRReviewJob, validateGitHubAppConfig } = await import('./github');
 
-      // Validate GitHub App configuration
       const configValidation = validateGitHubAppConfig();
       if (!configValidation.isValid) {
         throw new Error(`GitHub App configuration invalid: ${configValidation.errors.join(', ')}`);
       }
 
-      // Process based on action
       switch (action) {
         case 'opened':
           console.log(`📝 Processing opened PR: ${repoFullName}#${prNumber}`);
 
-          // Fetch PR data and perform review
           const prContext = await processPRReviewJob({
-            jobId: crypto.randomUUID(), // Generate temporary jobId for logging
+            jobId: crypto.randomUUID(),
             installationId,
             repoFullName,
             prNumber,
@@ -164,52 +157,73 @@ class PRReviewQueue {
             totalDeletions: prContext.changedFiles.reduce((sum, f) => sum + f.deletions, 0),
           });
 
-          // Generate AI-powered review - NOW RETURNS EVERYTHING AS JSON
-          const { generatePRReview: generateAIReview } = await import('./ai');
-          const completeAIResponse = await generateAIReview(prContext);
+          const [owner, repo] = repoFullName.split('/');
+          const repoRecord = await PullRequest.findOne({ repoFullName, prNumber });
+          const repoId = repoRecord?.repoId || 0;
 
-          console.log(`🎯 AI Review completed:`, completeAIResponse.response.parsed || { error: 'No parsed response' });
+          const { EnhancedAIReviewService: EnhancedReviewService } = await import('./enhanced-ai-review');
+          const enhancedAIResponse = await EnhancedReviewService.generateEnhancedReview(prContext, repoId);
 
-          // Store AI review in database if parsing was successful
+          console.log(`🎯 Enhanced AI Review completed:`, {
+            success: enhancedAIResponse.metadata.success,
+            commentsCount: enhancedAIResponse.response.parsed?.comments.length || 0,
+            validationErrors: enhancedAIResponse.response.validationErrors?.length || 0,
+            retriesUsed: enhancedAIResponse.response.retryCount
+          });
+
           let aiReviewRecord: any = null;
-          if (completeAIResponse.response.parsed) {
-            // Find the PR record to link the review
+          if (enhancedAIResponse.response.parsed || enhancedAIResponse.response.fallbackComments.length > 0) {
             const prRecord = await PullRequest.findOne({
               repoFullName,
               prNumber
             });
 
             if (prRecord) {
-              // Create AI review record
+              const reviewData = enhancedAIResponse.response.parsed || {
+                summary: 'AI review completed with validation issues',
+                comments: enhancedAIResponse.response.fallbackComments
+              };
+
               aiReviewRecord = await AIReview.create({
                 pullRequest: prRecord._id,
                 reviewer: 'AI',
-                comments: completeAIResponse.response.parsed.comments.map(comment => ({
-                  filePath: comment.filePath,
-                  line: comment.line,
-                  comment: comment.suggestion,
-                  severity: comment.severity
-                })),
-                status: 'completed'
+                summary: reviewData.summary,
+                comments: reviewData.comments,
+                metadata: {
+                  totalComments: reviewData.comments.length,
+                  severityBreakdown: reviewData.comments.reduce(
+                    (acc, comment) => {
+                      acc[comment.severity]++;
+                      return acc;
+                    },
+                    { critical: 0, major: 0, minor: 0 }
+                  ),
+                  analysisTime: enhancedAIResponse.response.processingTimeMs,
+                  validationErrors: enhancedAIResponse.response.validationErrors
+                },
+                status: enhancedAIResponse.metadata.success ? 'completed' : 'failed'
               });
 
-              // Add the review to the PR's aiReviews array
               await PullRequest.findByIdAndUpdate(prRecord._id, {
                 $push: { aiReviews: aiReviewRecord._id }
               });
 
-              console.log(`💾 AI Review stored in database: ${aiReviewRecord._id}`);
+              console.log(`💾 Enhanced AI Review stored in database: ${aiReviewRecord._id}`);
             }
           }
 
-          // Post AI review to GitHub PR
-          if (completeAIResponse.response.parsed) {
-            const { postAIReviewToGitHub } = await import('./github');
-            await postAIReviewToGitHub(
+          if (enhancedAIResponse.response.parsed || enhancedAIResponse.response.fallbackComments.length > 0) {
+            const { postStructuredAIReviewToGitHub } = await import('./github');
+            const reviewToPost = enhancedAIResponse.response.parsed || {
+              summary: 'AI review completed with validation issues - manual review recommended',
+              comments: enhancedAIResponse.response.fallbackComments
+            };
+
+            await postStructuredAIReviewToGitHub(
               installationId,
               repoFullName,
               prNumber,
-              completeAIResponse.response.parsed
+              reviewToPost
             );
           }
 
@@ -218,7 +232,6 @@ class PRReviewQueue {
         case 'synchronize':
           console.log(`🔄 Processing updated PR: ${repoFullName}#${prNumber}`);
 
-          // Re-fetch and re-analyze PR data
           const updatedPrContext = await processPRReviewJob({
             jobId: crypto.randomUUID(),
             installationId,
@@ -233,51 +246,72 @@ class PRReviewQueue {
             filesChanged: updatedPrContext.changedFiles.length,
           });
 
-          // Generate updated AI review - NOW RETURNS EVERYTHING AS JSON
-          const { generatePRReview: generateUpdatedAIReview } = await import('./ai');
-          const updatedCompleteAIResponse = await generateUpdatedAIReview(updatedPrContext);
+          const [updatedOwner, updatedRepo] = repoFullName.split('/');
+          const updatedRepoRecord = await PullRequest.findOne({ repoFullName, prNumber });
+          const updatedRepoId = updatedRepoRecord?.repoId || 0;
 
-          console.log(`🔄 Updated AI Review completed:`, updatedCompleteAIResponse.response.parsed || { error: 'No parsed response' });
+          const { EnhancedAIReviewService: UpdatedEnhancedReviewService } = await import('./enhanced-ai-review');
+          const updatedEnhancedAIResponse = await UpdatedEnhancedReviewService.generateEnhancedReview(updatedPrContext, updatedRepoId);
 
-          // Store updated AI review in database
-          if (updatedCompleteAIResponse.response.parsed) {
-            // Find the PR record to link the review
+          console.log(`🔄 Updated Enhanced AI Review completed:`, {
+            success: updatedEnhancedAIResponse.metadata.success,
+            commentsCount: updatedEnhancedAIResponse.response.parsed?.comments.length || 0,
+            validationErrors: updatedEnhancedAIResponse.response.validationErrors?.length || 0,
+            retriesUsed: updatedEnhancedAIResponse.response.retryCount
+          });
+
+          if (updatedEnhancedAIResponse.response.parsed || updatedEnhancedAIResponse.response.fallbackComments.length > 0) {
             const prRecord = await PullRequest.findOne({
               repoFullName,
               prNumber
             });
 
             if (prRecord) {
-              // Create updated AI review record
+              const updatedReviewData = updatedEnhancedAIResponse.response.parsed || {
+                summary: 'Updated AI review completed with validation issues',
+                comments: updatedEnhancedAIResponse.response.fallbackComments
+              };
+
               const updatedAiReviewRecord = await AIReview.create({
                 pullRequest: prRecord._id,
                 reviewer: 'AI',
-                comments: updatedCompleteAIResponse.response.parsed.comments.map(comment => ({
-                  filePath: comment.filePath,
-                  line: comment.line,
-                  comment: comment.suggestion,
-                  severity: comment.severity
-                })),
-                status: 'completed'
+                summary: updatedReviewData.summary,
+                comments: updatedReviewData.comments,
+                metadata: {
+                  totalComments: updatedReviewData.comments.length,
+                  severityBreakdown: updatedReviewData.comments.reduce(
+                    (acc, comment) => {
+                      acc[comment.severity]++;
+                      return acc;
+                    },
+                    { critical: 0, major: 0, minor: 0 }
+                  ),
+                  analysisTime: updatedEnhancedAIResponse.response.processingTimeMs,
+                  validationErrors: updatedEnhancedAIResponse.response.validationErrors
+                },
+                status: updatedEnhancedAIResponse.metadata.success ? 'completed' : 'failed'
               });
 
-              // Add the updated review to the PR's aiReviews array
               await PullRequest.findByIdAndUpdate(prRecord._id, {
                 $push: { aiReviews: updatedAiReviewRecord._id }
               });
 
-              console.log(`💾 Updated AI Review stored in database: ${updatedAiReviewRecord._id}`);
+              console.log(`💾 Updated Enhanced AI Review stored in database: ${updatedAiReviewRecord._id}`);
             }
           }
 
-          // Post updated AI review to GitHub PR
-          if (updatedCompleteAIResponse.response.parsed) {
-            const { postAIReviewToGitHub } = await import('./github');
-            await postAIReviewToGitHub(
+          if (updatedEnhancedAIResponse.response.parsed || updatedEnhancedAIResponse.response.fallbackComments.length > 0) {
+            const { postStructuredAIReviewToGitHub } = await import('./github');
+            const updatedReviewToPost = updatedEnhancedAIResponse.response.parsed || {
+              summary: 'Updated AI review completed with validation issues - manual review recommended',
+              comments: updatedEnhancedAIResponse.response.fallbackComments
+            };
+
+            await postStructuredAIReviewToGitHub(
               installationId,
               repoFullName,
               prNumber,
-              updatedCompleteAIResponse.response.parsed
+              updatedReviewToPost
             );
           }
 
@@ -285,7 +319,6 @@ class PRReviewQueue {
 
         case 'closed':
           console.log(`🔒 Processing closed PR: ${repoFullName}#${prNumber}`);
-          // TODO: Cleanup resources, archive review data
           break;
 
         default:
@@ -295,7 +328,6 @@ class PRReviewQueue {
     } catch (error) {
       console.error(`❌ Error processing PR ${repoFullName}#${prNumber}:`, error);
 
-      // Re-throw to trigger BullMQ retry logic
       throw error;
     }
   }
@@ -348,7 +380,7 @@ class PRReviewQueue {
   async addJob(jobData: PRReviewJob): Promise<Job<PRReviewJob>> {
     try {
       const job = await this.queue.add('processPR', jobData, {
-        jobId: jobData.jobId, // Use custom jobId for deduplication
+        jobId: jobData.jobId,
         priority: this.getJobPriority(jobData.action),
       });
 
@@ -366,13 +398,13 @@ class PRReviewQueue {
   private getJobPriority(action: string): number {
     switch (action) {
       case 'opened':
-        return 10; // High priority for new PRs
+        return 10;
       case 'synchronize':
-        return 5;  // Medium priority for updates
+        return 5;
       case 'closed':
-        return 1;  // Low priority for closed PRs
+        return 1;
       default:
-        return 5;  // Default medium priority
+        return 5;
     }
   }
 
@@ -404,6 +436,24 @@ class PRReviewQueue {
   }
 
   /**
+   * Health check for queue connectivity
+   */
+  async healthCheck(): Promise<{ isHealthy: boolean; details: any }> {
+    try {
+      await this.queue.getWaiting();
+      return { isHealthy: true, details: { status: 'connected' } };
+    } catch (error) {
+      return {
+        isHealthy: false,
+        details: {
+          status: 'disconnected',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
+  }
+
+  /**
    * Gracefully close the queue and worker
    */
   async close(): Promise<void> {
@@ -415,7 +465,6 @@ class PRReviewQueue {
   }
 }
 
-// Singleton instance
 let prReviewQueue: PRReviewQueue | null = null;
 
 /**
