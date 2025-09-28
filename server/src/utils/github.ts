@@ -1,6 +1,7 @@
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from 'octokit';
 import { Installation } from '../models/installation';
+import { StructuredAIReview, ReviewComment } from './schema-validation';
 
 export interface PRContext {
   repo: string;
@@ -38,9 +39,16 @@ function getGitHubAppAuth() {
     throw new Error('GITHUB_APP_ID and GITHUB_PRIVATE_KEY environment variables are required');
   }
 
+  let processedKey = privateKey;
+  if (privateKey.includes('\\n')) {
+    processedKey = privateKey.replace(/\\n/g, '\n');
+  } else if (!privateKey.includes('\n') && privateKey.length > 64) {
+    processedKey = privateKey.replace(/\\n/g, '\n');
+  }
+
   return {
     appId: parseInt(appId),
-    privateKey: privateKey.replace(/\\n/g, '\n'), // Handle escaped newlines
+    privateKey: processedKey,
   };
 }
 
@@ -54,12 +62,19 @@ async function getInstallationToken(installationId: number): Promise<string> {
 
     const installation = await Installation.findOne({ installationId });
 
-    if (installation && installation.accessToken) {
-      console.log(`✅ Found stored token for installation ${installationId}`);
-      return installation.accessToken;
+    if (installation && installation.accessToken && installation.accessTokenExpiresAt) {
+      const now = new Date();
+      const expiresAt = new Date(installation.accessTokenExpiresAt);
+
+      if (expiresAt > now) {
+        console.log(`✅ Found valid stored token for installation ${installationId} (expires: ${expiresAt.toISOString()})`);
+        return installation.accessToken;
+      } else {
+        console.log(`⏰ Stored token expired for installation ${installationId}, generating new one`);
+      }
     }
 
-    console.log(`⚠️ No stored token found, generating new JWT token for ${installationId}`);
+    console.log(`⚠️ No valid stored token found, generating new token for ${installationId}`);
 
     const auth = getGitHubAppAuth();
 
@@ -73,7 +88,19 @@ async function getInstallationToken(installationId: number): Promise<string> {
       installationId,
     });
 
-    console.log(`✅ Successfully obtained JWT token for ${installationId}`);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    await Installation.findOneAndUpdate(
+      { installationId },
+      {
+        accessToken: installationAuth.token,
+        accessTokenExpiresAt: expiresAt
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`✅ Successfully obtained and stored new token for ${installationId} (expires: ${expiresAt.toISOString()})`);
     return installationAuth.token;
   } catch (error) {
     console.error(`❌ Failed to get installation token for ${installationId}:`, error);
@@ -102,22 +129,19 @@ async function fetchPRData(
     console.log(`📥 Fetching PR data for ${repoFullName}#${prNumber}`);
     console.log(`🔍 Octokit instance received:`, !!octokit, typeof octokit);
 
-    // Split repo name
     const [owner, repo] = repoFullName.split('/');
 
-    // Fetch PR details
     const { data: pr } = await octokit.rest.pulls.get({
       owner,
       repo,
       pull_number: prNumber,
     });
 
-    // Fetch changed files
     const { data: files } = await octokit.rest.pulls.listFiles({
       owner,
       repo,
       pull_number: prNumber,
-      per_page: 100, // Limit to 100 files for now
+      per_page: 100,
     });
 
     const changedFiles = files.map((file: any) => ({
@@ -160,14 +184,11 @@ export async function processPRReviewJob(jobData: {
   console.log(`🚀 Starting PR review job: ${jobId} - ${repoFullName}#${prNumber} (${action})`);
 
   try {
-    // Get installation token
     const token = await getInstallationToken(installationId);
 
-    // Create Octokit instance
     const octokit = createOctokitWithToken(token);
     console.log(`🔧 Created Octokit instance:`, !!octokit, typeof octokit);
 
-    // Fetch PR data
     const prContext = await fetchPRData(octokit, repoFullName, prNumber);
 
     console.log(`🎉 Successfully processed PR review job: ${jobId}`);
@@ -215,42 +236,33 @@ export function findDiffPosition(patch: string, targetLine: number): number | nu
   if (!patch) return null;
 
   const lines = patch.split('\n');
-  let currentLine = 0; // Line number in the new file
-  let position = 0; // Position in the diff (starts from 1 for first diff line)
+  let currentLine = 0;
+  let position = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     if (line.startsWith('@@')) {
-      // Parse hunk header: @@ -start,length +start,length @@
       const hunkMatch = line.match(/@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@/);
       if (hunkMatch) {
-        currentLine = parseInt(hunkMatch[3]); // Start line in new file
-        // Don't increment position for hunk header
+        currentLine = parseInt(hunkMatch[3]);
         continue;
       }
     }
 
-    // Increment position for all diff lines (after hunk header)
     position++;
 
     if (line.startsWith(' ')) {
-      // Context line (unchanged)
       currentLine++;
     } else if (line.startsWith('+')) {
-      // Addition line
       if (currentLine === targetLine) {
         return position;
       }
       currentLine++;
     } else if (line.startsWith('-')) {
-      // Deletion line (doesn't count towards new file line numbers)
-      // We skip deletions for line number mapping
     }
   }
 
-  // If we can't find the exact line, try to find the closest addition line
-  // This is a fallback for cases where line numbers might be slightly off
   return findClosestAdditionLine(patch, targetLine);
 }
 
@@ -277,11 +289,9 @@ function findClosestAdditionLine(patch: string, targetLine: number): number | nu
       }
     }
 
-    // Increment position for diff lines only
     position++;
 
     if (line.startsWith('+')) {
-      // Addition line
       const distance = Math.abs(currentLine - targetLine);
       if (distance < closestDistance) {
         closestDistance = distance;
@@ -293,7 +303,6 @@ function findClosestAdditionLine(patch: string, targetLine: number): number | nu
     }
   }
 
-  // Only return if the closest line is within 5 lines
   return closestDistance <= 5 ? closestPosition : null;
 }
 
@@ -315,7 +324,6 @@ export async function postAIReviewToGitHub(
 
     const [owner, repo] = repoFullName.split('/');
 
-    // Get PR data to check if author is the same as the repo owner (self-review)
     const { data: prData } = await octokit.rest.pulls.get({
       owner,
       repo,
@@ -325,7 +333,6 @@ export async function postAIReviewToGitHub(
     const isSelfReview = prData.user?.login === owner;
     const hasHighSeverity = aiReview.comments.some(comment => comment.severity === 'high');
 
-    // Can't request changes on your own PR, so use COMMENT instead
     const event = (hasHighSeverity && !isSelfReview) ? 'REQUEST_CHANGES' : 'COMMENT';
 
     console.log(`🔍 Review event: ${event} (${hasHighSeverity ? 'has high severity issues' : 'no high severity issues'}${isSelfReview ? ', self-review (using COMMENT)' : ''})`);
@@ -355,14 +362,11 @@ export async function postAIReviewToGitHub(
     if (aiReview.comments.length > 0) {
       console.log(`💬 Posting ${aiReview.comments.length} inline comments with production diff position mapping...`);
 
-      // PR data already fetched above, reuse it
 
-      // Get individual file diffs for each file we need to comment on
       const filesToComment = [...new Set(aiReview.comments.map(c => c.filePath))];
 
       for (const filePath of filesToComment) {
         try {
-          // Get the diff for this specific file
           const { data: fileDiff } = await octokit.rest.pulls.listFiles({
             owner,
             repo,
@@ -377,7 +381,6 @@ export async function postAIReviewToGitHub(
             continue;
           }
 
-          // Process comments for this file
           const fileComments = aiReview.comments.filter(c => c.filePath === filePath);
 
           for (const comment of fileComments) {
@@ -390,19 +393,17 @@ export async function postAIReviewToGitHub(
                 commit_id: prData.head.sha,
                 path: filePath,
                 line: comment.line,
-                side: 'RIGHT' // Comment on the right side (new code)
+                side: 'RIGHT'
               });
 
               console.log(`✅ Posted inline comment on ${filePath}:${comment.line}`);
             } catch (commentError) {
               console.error(`❌ Failed to post inline comment on ${filePath}:${comment.line}:`, commentError);
-              // Continue with other comments even if one fails
             }
           }
 
         } catch (fileError) {
           console.error(`❌ Failed to process comments for file ${filePath}:`, fileError);
-          // Continue with other files
         }
       }
 
@@ -417,5 +418,144 @@ export async function postAIReviewToGitHub(
     }
 
     throw new Error('Failed to post review to GitHub: Unknown error');
+  }
+}
+
+/**
+ * Post structured AI review to GitHub pull request with enhanced formatting
+ */
+export async function postStructuredAIReviewToGitHub(
+  installationId: number,
+  repoFullName: string,
+  prNumber: number,
+  aiReview: StructuredAIReview
+): Promise<void> {
+  console.log(`📝 Starting to post structured AI review to GitHub: ${repoFullName}#${prNumber}`);
+
+  try {
+    const token = await getInstallationToken(installationId);
+    const octokit = createOctokitWithToken(token);
+    const [owner, repo] = repoFullName.split('/');
+
+    const { data: prData } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+
+    const isSelfReview = prData.user?.login === owner;
+    const hasHighSeverity = aiReview.comments.some(comment => comment.severity === 'critical');
+    const hasMajorSeverity = aiReview.comments.some(comment => comment.severity === 'major');
+
+    let event: 'COMMENT' | 'REQUEST_CHANGES' = 'COMMENT';
+    if ((hasHighSeverity || hasMajorSeverity) && !isSelfReview) {
+      event = 'REQUEST_CHANGES';
+    }
+
+    console.log(`🔍 Structured review event: ${event} (${hasHighSeverity ? 'has critical issues' : hasMajorSeverity ? 'has major issues' : 'only minor issues'}${isSelfReview ? ', self-review (using COMMENT)' : ''})`);
+
+    let reviewBody = `## 🤖 AI Code Review Summary\n\n${aiReview.summary}\n\n`;
+
+    if (aiReview.comments.length > 0) {
+      const criticalComments = aiReview.comments.filter(c => c.severity === 'critical');
+      const majorComments = aiReview.comments.filter(c => c.severity === 'major');
+      const minorComments = aiReview.comments.filter(c => c.severity === 'minor');
+
+      reviewBody += `### 📊 Review Results\n\n`;
+      reviewBody += `**Total Issues Found:** ${aiReview.comments.length}\n`;
+      if (criticalComments.length > 0) reviewBody += `🔴 **Critical:** ${criticalComments.length}\n`;
+      if (majorComments.length > 0) reviewBody += `🟡 **Major:** ${majorComments.length}\n`;
+      if (minorComments.length > 0) reviewBody += `🟢 **Minor:** ${minorComments.length}\n`;
+
+      if (criticalComments.length > 0) {
+        reviewBody += `\n#### 🔴 Critical Issues\n`;
+        criticalComments.forEach((comment, index) => {
+          reviewBody += `${index + 1}. **${comment.message}**\n`;
+          reviewBody += `   - *Why it matters:* ${comment.rationale}\n`;
+          if (comment.suggestion) {
+            reviewBody += `   - *Suggestion:* ${comment.suggestion}\n`;
+          }
+          reviewBody += `\n`;
+        });
+      }
+
+      if (majorComments.length > 0) {
+        reviewBody += `\n#### 🟡 Major Issues\n`;
+        majorComments.forEach((comment, index) => {
+          reviewBody += `${index + 1}. **${comment.message}**\n`;
+          reviewBody += `   - *Why it matters:* ${comment.rationale}\n`;
+          if (comment.suggestion) {
+            reviewBody += `   - *Suggestion:* ${comment.suggestion}\n`;
+          }
+          reviewBody += `\n`;
+        });
+      }
+
+      if (minorComments.length > 0) {
+        reviewBody += `\n#### 🟢 Minor Issues\n`;
+        minorComments.forEach((comment, index) => {
+          reviewBody += `${index + 1}. **${comment.message}**\n`;
+          reviewBody += `   - *Why it matters:* ${comment.rationale}\n`;
+          if (comment.suggestion) {
+            reviewBody += `   - *Suggestion:* ${comment.suggestion}\n`;
+          }
+          reviewBody += `\n`;
+        });
+      }
+
+      reviewBody += `---\n*This review was generated by AI. Please review the suggestions carefully before merging.*`;
+    }
+
+    await octokit.rest.pulls.createReview({
+      owner,
+      repo,
+      pull_number: prNumber,
+      body: reviewBody,
+      event: event as 'COMMENT' | 'REQUEST_CHANGES'
+    });
+
+    console.log(`✅ Successfully posted structured AI review to ${repoFullName}#${prNumber} (${aiReview.comments.length} comments)`);
+
+    if (aiReview.comments.length > 0) {
+      console.log(`💬 Posting ${aiReview.comments.length} structured inline comments...`);
+
+      for (const comment of aiReview.comments) {
+        try {
+          await octokit.rest.pulls.createReviewComment({
+            owner,
+            repo,
+            pull_number: prNumber,
+            body: `**${comment.severity.toUpperCase()}**: ${comment.message}\n\n${comment.rationale}${comment.suggestion ? `\n\n💡 **Suggestion:** ${comment.suggestion}` : ''}`,
+            commit_id: prData.head.sha,
+            path: comment.filePath,
+            line: comment.line,
+            side: 'RIGHT'
+          });
+
+          console.log(`✅ Posted structured inline comment on ${comment.filePath}:${comment.line}`);
+        } catch (commentError) {
+          console.error(`❌ Failed to post structured inline comment on ${comment.filePath}:${comment.line}:`, commentError);
+        }
+      }
+
+      console.log(`✅ Completed posting structured inline comments`);
+    }
+
+  } catch (error) {
+    console.error('❌ Failed to post structured review to GitHub:', error);
+
+    if (error instanceof Error) {
+      if (error.message.includes('Bad credentials')) {
+        throw new Error('GitHub authentication failed: Invalid installation token');
+      }
+      if (error.message.includes('Not Found')) {
+        throw new Error(`Pull request ${repoFullName}#${prNumber} not found`);
+      }
+      if (error.message.includes('Validation Failed')) {
+        throw new Error('GitHub API validation failed: Check request parameters');
+      }
+    }
+
+    throw new Error('Failed to post structured review to GitHub: Unknown error');
   }
 }

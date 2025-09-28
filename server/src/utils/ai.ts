@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { z } from 'zod';
 
-// PR Context interface (from GitHub service)
 export interface PRContext {
   repo: string;
   prNumber: number;
@@ -15,7 +14,6 @@ export interface PRContext {
   }[];
 }
 
-// AI Review Response Schema
 export const AIReviewSchema = z.object({
   summary: z.string(),
   comments: z.array(z.object({
@@ -28,7 +26,6 @@ export const AIReviewSchema = z.object({
 
 export type AIReviewResponse = z.infer<typeof AIReviewSchema>;
 
-// Complete AI Interaction Response
 export interface CompleteAIResponse {
   request: {
     prContext: PRContext;
@@ -53,7 +50,6 @@ export interface CompleteAIResponse {
   };
 }
 
-// OpenRouter API configuration
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const MODEL = 'x-ai/grok-4-fast:free';
 
@@ -75,7 +71,6 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
     timestamp: new Date().toISOString()
   });
 
-  // Prepare the prompt for the AI
   const prompt = createPRReviewPrompt(prContext);
   const requestTimestamp = new Date().toISOString();
 
@@ -97,7 +92,6 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
   let error: string | undefined;
 
   try {
-    // Make API call to OpenRouter
     const apiCallStart = Date.now();
 
     const response = await axios.post(
@@ -114,9 +108,9 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
             content: prompt
           }
         ],
-        temperature: 0.1, // Low temperature for consistent, factual responses
+        temperature: 0.1,
         max_tokens: 4000,
-        response_format: { type: 'json_object' } // Force JSON response
+        response_format: { type: 'json_object' }
       },
       {
         headers: {
@@ -125,7 +119,7 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
           'HTTP-Referer': process.env.APP_URL || 'http://localhost:8000',
           'X-Title': 'Burg AI PR Reviewer'
         },
-        timeout: 60000 // 60 second timeout
+        timeout: 60000
       }
     );
 
@@ -140,7 +134,6 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
 
     console.log('✅ AI response received, validating...');
 
-    // Parse and validate the response
     let parsedJson: unknown;
     try {
       parsedJson = JSON.parse(rawResponse);
@@ -151,7 +144,6 @@ export async function generatePRReview(prContext: PRContext): Promise<CompleteAI
       processingTimeMs = Date.now() - apiCallStart;
     }
 
-    // Validate against schema if parsing succeeded
     if (parsedJson && !validationErrors) {
       const validationResult = AIReviewSchema.safeParse(parsedJson);
 
@@ -280,7 +272,6 @@ export async function testOpenRouterConfig(): Promise<{ isValid: boolean; errors
   try {
     console.log('🧪 Testing OpenRouter API connection...');
 
-    // Make a simple test request
     const response = await axios.post(
       `${OPENROUTER_BASE_URL}/chat/completions`,
       {

@@ -45,7 +45,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString()
     });
 
-    // Check if GitHub App credentials are configured
     const clientId = process.env.GITHUB_APP_CLIENT_ID;
     const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET;
 
@@ -86,19 +85,17 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     console.log('✅ Access token obtained successfully');
 
-    // For now, we'll store the installation with basic info
-    // The access token from OAuth flow is what we need for API calls
     console.log('💾 Storing installation in database...');
 
     const installation = await Installation.findOneAndUpdate(
       { installationId },
       {
         installationId,
-        accountType: 'unknown', // We'll update this later if needed
-        accountLogin: 'unknown', // We'll update this later if needed
-        repositories: [], // We'll update this later if needed
+        accountType: 'unknown',
+        accountLogin: 'unknown',
+        repositories: [],
         accessToken: access_token,
-        accessTokenExpiresAt: null, // Installation access tokens don't expire
+        accessTokenExpiresAt: null,
         updatedAt: new Date()
       },
       {
@@ -114,7 +111,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       accessToken: access_token.substring(0, 10) + '...'
     });
 
-    // Return success response
     return res.json({
       success: true,
       message: 'GitHub App installation completed successfully',
@@ -127,7 +123,6 @@ router.get('/callback', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('❌ Error in GitHub callback:', error);
 
-    // Handle specific error types
     if (axios.isAxiosError(error)) {
       console.error('GitHub API Error:', {
         status: error.response?.status,
@@ -157,7 +152,6 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
-// Queue stats endpoint
 router.get('/queue/stats', async (req: Request, res: Response) => {
   try {
     const queue = getPRReviewQueue();
@@ -205,7 +199,6 @@ router.get('/installations', async (req: Request, res: Response) => {
   }
 });
 
-// GitHub App setup endpoint
 router.get('/setup', (req: Request, res: Response) => {
   const appId = process.env.GITHUB_APP_ID;
   const clientId = process.env.GITHUB_APP_CLIENT_ID;
@@ -245,7 +238,6 @@ router.get('/setup', (req: Request, res: Response) => {
   });
 });
 
-// Get pull requests
 router.get('/pull-requests', async (req: Request, res: Response) => {
   try {
     const { repo, installationId, status, limit = 50 } = req.query;
@@ -279,7 +271,6 @@ router.get('/pull-requests', async (req: Request, res: Response) => {
   }
 });
 
-// Get AI reviews
 router.get('/reviews', async (req: Request, res: Response) => {
   try {
     const { prId, status, limit = 50 } = req.query;
@@ -311,7 +302,6 @@ router.get('/reviews', async (req: Request, res: Response) => {
   }
 });
 
-// Get queue tasks
 router.get('/queue-tasks', async (req: Request, res: Response) => {
   try {
     const { status, limit = 50 } = req.query;
@@ -342,7 +332,6 @@ router.get('/queue-tasks', async (req: Request, res: Response) => {
   }
 });
 
-// Health check for GitHub routes
 router.get('/health', (req: Request, res: Response) => {
   res.json({
     success: true,

@@ -78,19 +78,16 @@ router.post('/github', async (req: Request, res: Response) => {
   });
 
   try {
-    // Check if webhook secret is configured
     if (!secret) {
       console.error('❌ GITHUB_WEBHOOK_SECRET not configured');
       return res.status(500).send('Server configuration error');
     }
 
-    // Only process pull_request events
     if (event !== 'pull_request') {
       console.log('⚠️ Ignoring non-pull_request event:', event);
       return res.status(400).send('Unsupported event type');
     }
 
-    // Verify webhook signature
     const payload = JSON.stringify(req.body);
     if (!verifyWebhookSignature(payload, signature, secret)) {
       console.error('❌ HMAC verification failed for delivery:', deliveryId);
@@ -99,7 +96,6 @@ router.post('/github', async (req: Request, res: Response) => {
 
     console.log('✅ HMAC verification successful');
 
-    // Extract job data from payload
     const job = extractPullRequestJob(req.body);
     if (!job) {
       console.error('❌ Invalid pull_request payload structure');
@@ -113,13 +109,21 @@ router.post('/github', async (req: Request, res: Response) => {
     }
 
     const prData = req.body.pull_request;
+    const repoId = req.body.repository?.id;
+
+    if (!repoId) {
+      console.error('❌ Repository ID not found in webhook payload');
+      return res.status(400).send('Invalid repository data');
+    }
+
     const prRecord = await PullRequest.findOneAndUpdate(
       {
+        repoId,
         repoFullName: job.repoFullName,
-        prNumber: job.prNumber,
-        installation: installation._id
+        prNumber: job.prNumber
       },
       {
+        repoId,
         repoFullName: job.repoFullName,
         prNumber: job.prNumber,
         installation: installation._id,
