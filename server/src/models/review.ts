@@ -15,6 +15,14 @@ export interface IAIReview extends Document {
     };
     analysisTime: number;
     validationErrors?: string[];
+    memoryUsage?: {
+      memoryRetrieved: boolean;
+      memorySnippetsUsed: number;
+      memoryRetrievalTime: number;
+      memoryCollectionName?: string;
+      memorySearchQuery?: string;
+      memoryRelevanceScore?: number;
+    };
   };
   status: 'pending' | 'completed' | 'failed';
   createdAt: Date;
@@ -43,7 +51,15 @@ const AIReviewSchema: Schema = new Schema({
       minor: { type: Number, default: 0 }
     },
     analysisTime: { type: Number, default: 0 },
-    validationErrors: [{ type: String }]
+    validationErrors: [{ type: String }],
+    memoryUsage: {
+      memoryRetrieved: { type: Boolean, default: false },
+      memorySnippetsUsed: { type: Number, default: 0 },
+      memoryRetrievalTime: { type: Number, default: 0 },
+      memoryCollectionName: { type: String },
+      memorySearchQuery: { type: String },
+      memoryRelevanceScore: { type: Number, min: 0, max: 1 }
+    }
   },
   status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
 }, { timestamps: true });
@@ -51,5 +67,7 @@ const AIReviewSchema: Schema = new Schema({
 AIReviewSchema.index({ pullRequest: 1, status: 1 });
 AIReviewSchema.index({ 'comments.severity': 1 });
 AIReviewSchema.index({ createdAt: -1 });
+AIReviewSchema.index({ 'metadata.memoryUsage.memoryRetrieved': 1 });
+AIReviewSchema.index({ 'metadata.memoryUsage.memorySnippetsUsed': 1 });
 
 export const AIReview = mongoose.model<IAIReview>('AIReview', AIReviewSchema);
