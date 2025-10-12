@@ -1,43 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-
-export interface IMemoryAnalytics extends Document {
-  repositoryId: string;
-  period: {
-    start: Date;
-    end: Date;
-    type: 'daily' | 'weekly' | 'monthly';
-  };
-  metrics: {
-    totalMemories: number;
-    memoriesAdded: number;
-    memoriesRetrieved: number;
-    averageRetrievalTime: number;
-    memoryHitRate: number;
-    categoryDistribution: {
-      naming: number;
-      'error-handling': number;
-      performance: number;
-      security: number;
-      architecture: number;
-      style: number;
-    };
-    topPatterns: Array<{
-      pattern: string;
-      category: string;
-      usageCount: number;
-      confidence: number;
-    }>;
-  };
-  performance: {
-    retrievalSuccessRate: number;
-    averageRelevanceScore: number;
-    memoryStorageGrowth: number;
-    apiCallCount: number;
-    errorCount: number;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
+import { IMemoryAnalytics } from '../types/mem0Types';
 
 const MemoryAnalyticsSchema: Schema = new Schema({
   repositoryId: { type: String, required: true, index: true },

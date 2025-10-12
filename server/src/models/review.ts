@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { ReviewComment, StructuredAIReview } from '../utils/schema-validation';
+import { MemoryUsageMetadata } from '../types/mem0Types';
 
 export interface IAIReview extends Document {
   pullRequest: mongoose.Types.ObjectId;
@@ -15,14 +16,7 @@ export interface IAIReview extends Document {
     };
     analysisTime: number;
     validationErrors?: string[];
-    memoryUsage?: {
-      memoryRetrieved: boolean;
-      memorySnippetsUsed: number;
-      memoryRetrievalTime: number;
-      memoryCollectionName?: string;
-      memorySearchQuery?: string;
-      memoryRelevanceScore?: number;
-    };
+    memoryUsage?: MemoryUsageMetadata;
   };
   status: 'pending' | 'completed' | 'failed';
   createdAt: Date;
