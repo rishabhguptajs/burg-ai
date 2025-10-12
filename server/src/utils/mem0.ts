@@ -1,72 +1,14 @@
 import { MemoryClient, Memory, Message, MemoryOptions, SearchOptions } from 'mem0ai';
 import { appLogger, withRetry, withTimeout } from './logging';
-
-/**
- * Custom error classes for Mem0 operations
- */
-export class Mem0Error extends Error {
-  constructor(message: string, public operation: string, public cause?: Error) {
-    super(message);
-    this.name = 'Mem0Error';
-  }
-}
-
-export class Mem0ConnectionError extends Mem0Error {
-  constructor(message: string, operation: string, cause?: Error) {
-    super(message, operation, cause);
-    this.name = 'Mem0ConnectionError';
-  }
-}
-
-export class Mem0TimeoutError extends Mem0Error {
-  constructor(operation: string, timeoutMs: number) {
-    super(`Operation '${operation}' timed out after ${timeoutMs}ms`, operation);
-    this.name = 'Mem0TimeoutError';
-  }
-}
-
-export class Mem0RateLimitError extends Mem0Error {
-  constructor(operation: string, retryAfter?: number) {
-    super(`Rate limit exceeded for operation '${operation}'`, operation);
-    this.name = 'Mem0RateLimitError';
-    this.retryAfter = retryAfter;
-  }
-
-  retryAfter?: number;
-}
-
-export interface Mem0Config {
-  apiKey: string;
-  host?: string;
-  organizationName?: string;
-  projectName?: string;
-  organizationId?: string | number;
-  projectId?: string | number;
-}
-
-export interface MemoryCollection {
-  name: string;
-  description: string;
-  metadata?: Record<string, any>;
-}
-
-export interface CodeReviewMemory {
-  id?: string;
-  repositoryId: string;
-  userId?: string;
-  pattern: string;
-  category: 'naming' | 'error-handling' | 'performance' | 'security' | 'architecture' | 'style';
-  confidence: number;
-  examples: string[];
-  rationale: string;
-  metadata: {
-    fileTypes?: string[];
-    languages?: string[];
-    source?: string;
-    createdAt?: Date;
-    updatedAt?: Date;
-  };
-}
+import {
+  Mem0Error,
+  Mem0ConnectionError,
+  Mem0TimeoutError,
+  Mem0RateLimitError,
+  Mem0Config,
+  MemoryCollection,
+  CodeReviewMemory
+} from '../types/mem0Types';
 
 class Mem0Service {
   private client: MemoryClient | null = null;

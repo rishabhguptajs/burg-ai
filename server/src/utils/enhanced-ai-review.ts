@@ -8,42 +8,10 @@ import {
 } from './schema-validation';
 import { PromptBuilder } from './prompt-builder';
 import { RepoConfigService } from '../models/repo-config';
+import { EnhancedAIReviewResponse } from '../types/mem0Types';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const DEFAULT_MODEL = 'x-ai/grok-4-fast:free';
-
-/**
- * Enhanced AI review response with comprehensive tracking
- */
-export interface EnhancedAIReviewResponse {
-  request: {
-    prContext: PRContext;
-    prompt: string;
-    timestamp: string;
-    model: string;
-    temperature: number;
-    maxTokens: number;
-    repoConfig: any;
-  };
-  response: {
-    raw: string;
-    parsed: StructuredAIReview | null;
-    validationErrors: string[] | null;
-    fallbackComments: ReviewComment[];
-    timestamp: string;
-    processingTimeMs: number;
-    retryCount: number;
-  };
-  metadata: {
-    success: boolean;
-    error?: string;
-    apiCallDuration: number;
-    totalDuration: number;
-    schemaValidationPassed: boolean;
-    memorySnippetsUsed: number;
-    finalCommentsCount: number;
-  };
-}
 
 /**
  * Enhanced AI Review Service with structured output and validation

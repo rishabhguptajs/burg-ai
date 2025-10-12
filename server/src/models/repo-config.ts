@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { MemorySettings } from '../types/mem0Types';
 
 export interface IRepoConfig extends Document {
   repoId: number;
@@ -32,11 +33,7 @@ export interface IRepoConfig extends Document {
     };
   };
 
-  memorySettings: {
-    useMemoryRetrieval: boolean;
-    maxMemorySnippets: number;
-    memorySimilarityThreshold: number;
-  };
+  memorySettings: MemorySettings;
 
   createdAt: Date;
   updatedAt: Date;
