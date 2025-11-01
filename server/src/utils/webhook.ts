@@ -1,13 +1,5 @@
 import crypto from 'crypto';
-
-export interface GitHubWebhookJob {
-  jobId: string;
-  installationId: number;
-  repoFullName: string;
-  prNumber: number;
-  headSha: string;
-  action: string;
-}
+import { GitHubWebhookJob } from '../types';
 
 /**
  * Verifies the HMAC signature of a GitHub webhook payload

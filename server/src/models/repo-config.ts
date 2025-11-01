@@ -74,11 +74,6 @@ const RepoConfigSchema: Schema = new Schema({
     }
   },
 
-  memorySettings: {
-    useMemoryRetrieval: { type: Boolean, default: true },
-    maxMemorySnippets: { type: Number, min: 1, max: 20, default: 5 },
-    memorySimilarityThreshold: { type: Number, min: 0, max: 1, default: 0.7 }
-  }
 }, { timestamps: true });
 
 RepoConfigSchema.index({ owner: 1, repoId: 1 });

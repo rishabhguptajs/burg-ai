@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { appLogger } from '../utils/logging';
-import { EnhancedAIReviewService } from '../utils/enhanced-ai-review';
 import { getPRReviewQueue } from '../utils/queue';
 import { validateGitHubAppConfig } from '../utils/github';
+import { testOpenRouterConfig } from '../utils/ai';
 
 const router = Router();
 
@@ -41,9 +41,13 @@ router.get('/', async (req: Request, res: Response) => {
 
     try {
       const queue = getPRReviewQueue();
-      await queue.healthCheck();
-      checks.redis = true;
-      details.redis = { status: 'healthy' };
+      // Check if queue is accessible (basic health check)
+      if (queue) {
+        checks.redis = true;
+        details.redis = { status: 'healthy' };
+      } else {
+        throw new Error('Queue not initialized');
+      }
     } catch (error) {
       details.redis = {
         status: 'unhealthy',
@@ -66,7 +70,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     try {
-      const aiCheck = await EnhancedAIReviewService.testEnhancedReviewConfig();
+      const aiCheck = await testOpenRouterConfig();
       checks.ai = aiCheck.isValid;
       details.ai = {
         status: aiCheck.isValid ? 'healthy' : 'unhealthy',

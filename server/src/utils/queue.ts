@@ -3,15 +3,7 @@ import crypto from 'crypto';
 import { QueueTask } from '../models/queuetask';
 import { PullRequest } from '../models/pr';
 import { AIReview } from '../models/review';
-
-export interface PRReviewJob {
-  jobId: string;
-  installationId: number;
-  repoFullName: string;
-  prNumber: number;
-  headSha: string;
-  action: string;
-}
+import { PRReviewJob } from '../types';
 
 class PRReviewQueue {
   private queue: Queue<PRReviewJob>;

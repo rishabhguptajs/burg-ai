@@ -3,20 +3,10 @@ import crypto from 'crypto';
 import { getPRReviewQueue } from '../utils/queue';
 import { PullRequest } from '../models/pr';
 import { Installation } from '../models/installation';
+import { GitHubWebhookJob } from '../types';
 
 const router = Router();
 
-/**
- * GitHub Webhook Job Interface
- */
-interface GitHubWebhookJob {
-  jobId: string;
-  installationId: number;
-  repoFullName: string;
-  prNumber: number;
-  headSha: string;
-  action: string;
-}
 
 /**
  * Verify HMAC signature of GitHub webhook payload

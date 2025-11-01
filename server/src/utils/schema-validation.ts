@@ -1,5 +1,6 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
+import { ReviewComment, StructuredAIReview } from '../types';
 
 const ajv = new Ajv({
   allErrors: true,
@@ -9,29 +10,6 @@ const ajv = new Ajv({
   strict: true
 });
 addFormats(ajv);
-
-export interface ReviewComment {
-  filePath: string;
-  line: number;
-  severity: 'critical' | 'major' | 'minor';
-  message: string;
-  rationale: string;
-  suggestion?: string;
-}
-
-export interface StructuredAIReview {
-  summary: string;
-  comments: ReviewComment[];
-  metadata?: {
-    totalComments: number;
-    severityBreakdown: {
-      critical: number;
-      major: number;
-      minor: number;
-    };
-    analysisTime: number;
-  };
-}
 
 const reviewCommentSchema = {
   type: 'object',

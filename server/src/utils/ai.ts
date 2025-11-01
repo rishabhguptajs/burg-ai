@@ -1,18 +1,7 @@
 import axios from 'axios';
 import { z } from 'zod';
+import { PRContext, AIReviewComment, AIReview, CompleteAIResponse } from '../types';
 
-export interface PRContext {
-  repo: string;
-  prNumber: number;
-  title: string;
-  description: string;
-  changedFiles: {
-    path: string;
-    patch: string;
-    additions: number;
-    deletions: number;
-  }[];
-}
 
 export const AIReviewSchema = z.object({
   summary: z.string(),
@@ -26,29 +15,6 @@ export const AIReviewSchema = z.object({
 
 export type AIReviewResponse = z.infer<typeof AIReviewSchema>;
 
-export interface CompleteAIResponse {
-  request: {
-    prContext: PRContext;
-    prompt: string;
-    timestamp: string;
-    model: string;
-    temperature: number;
-    maxTokens: number;
-  };
-  response: {
-    raw: string;
-    parsed: AIReviewResponse | null;
-    validationErrors: string[] | null;
-    timestamp: string;
-    processingTimeMs: number;
-  };
-  metadata: {
-    success: boolean;
-    error?: string;
-    apiCallDuration: number;
-    totalDuration: number;
-  };
-}
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const MODEL = 'x-ai/grok-4-fast:free';
