@@ -184,7 +184,7 @@ class PRReviewQueue {
                 metadata: {
                   totalComments: reviewData.comments.length,
                   severityBreakdown: reviewData.comments.reduce(
-                    (acc, comment) => {
+                    (acc: { critical: number; major: number; minor: number }, comment: { severity: 'critical' | 'major' | 'minor' }) => {
                       acc[comment.severity]++;
                       return acc;
                     },
@@ -272,7 +272,7 @@ class PRReviewQueue {
                 metadata: {
                   totalComments: updatedReviewData.comments.length,
                   severityBreakdown: updatedReviewData.comments.reduce(
-                    (acc, comment) => {
+                    (acc: { critical: number; major: number; minor: number }, comment: { severity: 'critical' | 'major' | 'minor' }) => {
                       acc[comment.severity]++;
                       return acc;
                     },
