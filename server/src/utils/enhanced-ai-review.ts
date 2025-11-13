@@ -1,24 +1,61 @@
 import axios from 'axios';
-import { PRContext } from './ai';
+import { PRContext, StructuredAIReview, ReviewComment } from '../types';
 import {
-  StructuredAIReview,
-  ReviewComment,
   validateStructuredAIReviewData,
   createFallbackComment
 } from './schema-validation';
 import { PromptBuilder } from './prompt-builder';
 import { RepoConfigService } from '../models/repo-config';
-import { EnhancedAIReviewResponse } from '../types/mem0Types';
+import { FrameworkDetector } from './framework-detector';
+import { HistoricalReviewService } from './historical-review-service';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_MODEL = 'x-ai/grok-4-fast:free';
+const DEFAULT_MODEL = 'openai/gpt-oss-20b:free';
+
+/**
+ * Enhanced AI review response with comprehensive metadata
+ */
+export interface EnhancedAIReviewResponse {
+  request: {
+    prContext: any;
+    prompt: string;
+    timestamp: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    repoConfig: any;
+    frameworkInfo?: any;
+    historicalReviews?: any[];
+    repoStats?: any;
+  };
+  response: {
+    raw: string;
+    parsed: StructuredAIReview | null;
+    validationErrors: string[] | null;
+    fallbackComments: ReviewComment[];
+    timestamp: string;
+    processingTimeMs: number;
+    retryCount: number;
+  };
+  metadata: {
+    success: boolean;
+    error?: string;
+    apiCallDuration: number;
+    totalDuration: number;
+    schemaValidationPassed: boolean;
+    memorySnippetsUsed: number;
+    finalCommentsCount: number;
+  };
+}
 
 /**
  * Enhanced AI Review Service with structured output and validation
  */
 export class EnhancedAIReviewService {
-  private static readonly MAX_RETRIES = 2;
-  private static readonly RETRY_DELAY_MS = 1000;
+  private static readonly MAX_RETRIES = 8;
+  private static readonly RETRY_DELAY_MS = 3000;
+  private static readonly MAX_RATE_LIMIT_RETRIES = 5;
+  private static readonly RATE_LIMIT_BACKOFF_MS = 8000;
 
   /**
    * Generate enhanced AI-powered PR review with structured validation
@@ -43,20 +80,42 @@ export class EnhancedAIReviewService {
 
     const repoConfig = await RepoConfigService.getOrCreateConfig(repoId, prContext.repo);
 
+    // Detect frameworks and technologies from the codebase
+    const frameworkInfo = await FrameworkDetector.detectFrameworks(prContext.changedFiles, prContext.repo);
+
+    // Get historical reviews for context and learning
+    const historicalReviews = await HistoricalReviewService.getHistoricalReviews(repoId);
+
+    // Get repository statistics
+    const repoStats = await HistoricalReviewService.getRepoStats(repoId);
+
+    console.log('🤖 Enhanced AI Review Context:', {
+      frameworks: frameworkInfo.frameworks,
+      languages: frameworkInfo.languages,
+      historicalReviewsCount: historicalReviews.length,
+      repoStats
+    });
+
     const prompt = PromptBuilder.buildReviewPrompt({
       repoId: repoId.toString(),
       prNumber: prContext.prNumber,
-      files: prContext.changedFiles
+      files: prContext.changedFiles,
+      frameworkInfo,
+      historicalReviews,
+      repoConfig
     });
 
     const requestData = {
       prContext,
       prompt,
       timestamp: new Date().toISOString(),
-      model: repoConfig.aiSettings?.model || DEFAULT_MODEL,
-      temperature: repoConfig.aiSettings?.temperature || 0.1,
-      maxTokens: repoConfig.aiSettings?.maxTokens || 4000,
-      repoConfig
+      model: DEFAULT_MODEL,
+      temperature: 0.1,
+      maxTokens: 4000,
+      repoConfig,
+      frameworkInfo,
+      historicalReviews: historicalReviews,
+      repoStats
     };
 
     let apiCallDuration = 0;
@@ -82,15 +141,16 @@ export class EnhancedAIReviewService {
             messages: [
               {
                 role: 'system',
-                content: 'You are an expert code reviewer. Analyze the provided code changes and respond with valid JSON matching the specified schema. Do not include any text outside of the JSON structure.'
+                content: 'You are an expert code reviewer. Respond ONLY with valid JSON matching the schema below. No markdown, no code blocks, no extra text. Just pure JSON.\n\nRESPOND WITH ONLY:\n{"summary":"...","comments":[...]}'
               },
               {
                 role: 'user',
                 content: prompt
               }
             ],
-            temperature: requestData.temperature,
-            max_tokens: requestData.maxTokens,
+            temperature: 0.3,
+            top_p: 0.9,
+            max_tokens: 4096,
             response_format: { type: 'json_object' }
           },
           {
@@ -100,7 +160,7 @@ export class EnhancedAIReviewService {
               'HTTP-Referer': process.env.APP_URL || 'http://localhost:8000',
               'X-Title': 'Burg AI PR Reviewer'
             },
-            timeout: 60000
+            timeout: 90000
           }
         );
 
@@ -116,18 +176,43 @@ export class EnhancedAIReviewService {
 
         let parsedJson: unknown;
         try {
+          // Try direct parsing first
           parsedJson = JSON.parse(rawResponse);
           processingTimeMs = Date.now() - apiCallStart;
         } catch (parseError) {
-          console.error('❌ Failed to parse AI response as JSON:', rawResponse.substring(0, 500));
-          validationErrors = [`Failed to parse as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`];
+          console.log(`⚠️ Direct JSON parse failed, attempting extraction...`);
+          
+          // Try to extract JSON from corrupted response
+          const extractedJson = this.extractValidJson(rawResponse);
+          if (extractedJson) {
+            try {
+              parsedJson = JSON.parse(extractedJson);
+              processingTimeMs = Date.now() - apiCallStart;
+              console.log(`✅ Successfully extracted valid JSON from corrupted response`);
+            } catch (extractError) {
+              console.error('❌ Failed to parse extracted JSON:', extractedJson.substring(0, 200));
+              validationErrors = [`Failed to parse extracted JSON: ${extractError instanceof Error ? extractError.message : 'Unknown error'}`];
 
-          if (attempt < this.MAX_RETRIES) {
-            console.log(`🔄 Retrying after JSON parse failure...`);
-            await this.delay(this.RETRY_DELAY_MS);
-            continue;
+              if (attempt < this.MAX_RETRIES) {
+                console.log(`🔄 Retrying after JSON extraction failure...`);
+                const delayMs = this.RETRY_DELAY_MS * Math.pow(2, attempt);
+                await this.delay(delayMs);
+                continue;
+              }
+              break;
+            }
+          } else {
+            console.error('❌ Failed to parse AI response and no valid JSON found:', rawResponse.substring(0, 300));
+            validationErrors = [`Failed to parse as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`];
+
+            if (attempt < this.MAX_RETRIES) {
+              console.log(`🔄 Retrying after JSON parse failure...`);
+              const delayMs = this.RETRY_DELAY_MS * Math.pow(2, attempt);
+              await this.delay(delayMs);
+              continue;
+            }
+            break;
           }
-          break;
         }
 
         const validation = validateStructuredAIReviewData(parsedJson);
@@ -137,12 +222,14 @@ export class EnhancedAIReviewService {
           validationErrors = validation.errors || null;
 
           if (attempt === this.MAX_RETRIES) {
+            console.log('⚠️ Max retries reached, generating fallback comments...');
             fallbackComments = this.generateFallbackComments(rawResponse, prContext);
           }
 
           if (attempt < this.MAX_RETRIES) {
-            console.log(`🔄 Retrying after validation failure...`);
-            await this.delay(this.RETRY_DELAY_MS);
+            console.log(`🔄 Retrying after validation failure (attempt ${attempt + 1}/${this.MAX_RETRIES})...`);
+            const delayMs = this.RETRY_DELAY_MS * Math.pow(2, Math.min(attempt, 3));
+            await this.delay(delayMs);
             continue;
           }
         } else {
@@ -154,15 +241,34 @@ export class EnhancedAIReviewService {
 
       } catch (err) {
         error = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`❌ AI review generation failed (attempt ${attempt + 1}):`, error);
 
         if (axios.isAxiosError(err)) {
+          const status = err.response?.status;
+          console.error(`❌ AI review generation failed (attempt ${attempt + 1}):`, error);
           console.error('OpenRouter API Error:', {
-            status: err.response?.status,
+            status: status,
             statusText: err.response?.statusText,
             data: err.response?.data
           });
-          error = `API Error ${err.response?.status}: ${err.response?.statusText}`;
+          error = `API Error ${status}: ${err.response?.statusText}`;
+
+          // Handle rate limiting (429) with aggressive exponential backoff
+          if (status === 429 && attempt < this.MAX_RATE_LIMIT_RETRIES) {
+            const backoffDelay = this.RATE_LIMIT_BACKOFF_MS * Math.pow(2, attempt);
+            console.log(`⏳ Rate limited (429). Retrying after ${backoffDelay}ms (attempt ${attempt + 1}/${this.MAX_RATE_LIMIT_RETRIES})...`);
+            await this.delay(backoffDelay);
+            continue;
+          }
+
+          // Handle timeout and other transient errors with exponential backoff
+          if ((status === 503 || status === 502 || status === 500 || err.code === 'ECONNABORTED') && attempt < this.MAX_RETRIES) {
+            const delayMs = this.RETRY_DELAY_MS * Math.pow(2, Math.min(attempt, 3));
+            console.log(`⏳ Server error (${status}). Retrying after ${delayMs}ms (attempt ${attempt + 1}/${this.MAX_RETRIES})...`);
+            await this.delay(delayMs);
+            continue;
+          }
+        } else {
+          console.error(`❌ AI review generation failed (attempt ${attempt + 1}):`, error);
         }
 
         break;
@@ -229,19 +335,19 @@ export class EnhancedAIReviewService {
     const fallbackComments: ReviewComment[] = [];
 
     try {
-      const fileLines = prContext.changedFiles.flatMap(file =>
+      const fileLines = prContext.changedFiles.flatMap((file: { path: string; patch: string; additions: number; deletions: number }) =>
         file.patch.split('\n')
-          .map((line, index) => ({
+          .map((line: string, index: number) => ({
             file: file.path,
             line: index + 1,
             content: line
           }))
-          .filter(item => item.content.trim().length > 0)
+          .filter((item: { file: string; line: number; content: string }) => item.content.trim().length > 0)
       );
 
-      const uniqueFiles = [...new Set(prContext.changedFiles.map(f => f.path))];
+      const uniqueFiles = [...new Set(prContext.changedFiles.map((f: { path: string; patch: string; additions: number; deletions: number }) => f.path))];
 
-      uniqueFiles.forEach(filePath => {
+      uniqueFiles.forEach((filePath: string) => {
         const fallbackComment = createFallbackComment(
           filePath,
           1,
@@ -263,6 +369,76 @@ export class EnhancedAIReviewService {
     }
 
     return fallbackComments;
+  }
+
+  /**
+   * Extract valid JSON from corrupted or malformed responses
+   * Handles cases where the AI model adds markdown or repeated tokens
+   */
+  private static extractValidJson(response: string): string | null {
+    // Remove markdown code blocks and backticks
+    let cleaned = response
+      .replace(/```json\n?/g, '')
+      .replace(/```jsonc\n?/g, '')
+      .replace(/```\n?/g, '')
+      .replace(/`/g, '');
+
+    // Remove common repeated token patterns (like repeated "jsonc")
+    cleaned = cleaned.replace(/(\w+)(jsonc)+/g, '$1');
+    cleaned = cleaned.replace(/json(\w+)+/g, 'json');
+
+    // Try to find the JSON object by looking for opening and closing braces
+    const openBraceIndex = cleaned.indexOf('{');
+    const lastCloseBraceIndex = cleaned.lastIndexOf('}');
+
+    if (openBraceIndex === -1 || lastCloseBraceIndex === -1) {
+      console.log('❌ No JSON object delimiters found in response');
+      return null;
+    }
+
+    let jsonString = cleaned.substring(openBraceIndex, lastCloseBraceIndex + 1);
+
+    // Fix common issues:
+    // 1. Remove any leading/trailing whitespace
+    jsonString = jsonString.trim();
+
+    // 2. Fix escaped newlines in strings (preserve actual newlines in JSON)
+    jsonString = jsonString.replace(/\\n/g, '\\n');
+
+    // 3. Handle unescaped quotes inside strings (basic approach)
+    // This is tricky - try to balance quotes
+    try {
+      // Do a quick validation to see if it's valid
+      JSON.parse(jsonString);
+      return jsonString;
+    } catch (e) {
+      console.log('⚠️ Extracted JSON is still invalid, attempting repairs...');
+      
+      // Try to fix common issues
+      // Fix missing quotes around keys
+      jsonString = jsonString.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+
+      // Fix trailing commas
+      jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+
+      // Remove any lines that aren't JSON
+      const lines = jsonString.split('\n');
+      const validLines = lines.filter(line => {
+        const trimmed = line.trim();
+        return trimmed.length === 0 || 
+               trimmed.startsWith('{') || 
+               trimmed.startsWith('}') ||
+               trimmed.startsWith('"') ||
+               trimmed.startsWith('[') ||
+               trimmed.startsWith(']') ||
+               trimmed.match(/^[,\w]/) ||
+               trimmed.endsWith(':') ||
+               trimmed.endsWith(',');
+      });
+      jsonString = validLines.join('\n');
+
+      return jsonString;
+    }
   }
 
   /**
