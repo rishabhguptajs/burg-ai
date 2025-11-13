@@ -1,6 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ReviewComment, StructuredAIReview } from '../utils/schema-validation';
-import { MemoryUsageMetadata } from '../types/mem0Types';
+import { ReviewComment, StructuredAIReview } from '../types';
 
 export interface IAIReview extends Document {
   pullRequest: mongoose.Types.ObjectId;
@@ -16,7 +15,6 @@ export interface IAIReview extends Document {
     };
     analysisTime: number;
     validationErrors?: string[];
-    memoryUsage?: MemoryUsageMetadata;
   };
   status: 'pending' | 'completed' | 'failed';
   createdAt: Date;
@@ -45,15 +43,7 @@ const AIReviewSchema: Schema = new Schema({
       minor: { type: Number, default: 0 }
     },
     analysisTime: { type: Number, default: 0 },
-    validationErrors: [{ type: String }],
-    memoryUsage: {
-      memoryRetrieved: { type: Boolean, default: false },
-      memorySnippetsUsed: { type: Number, default: 0 },
-      memoryRetrievalTime: { type: Number, default: 0 },
-      memoryCollectionName: { type: String },
-      memorySearchQuery: { type: String },
-      memoryRelevanceScore: { type: Number, min: 0, max: 1 }
-    }
+    validationErrors: [{ type: String }]
   },
   status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
 }, { timestamps: true });
@@ -61,7 +51,5 @@ const AIReviewSchema: Schema = new Schema({
 AIReviewSchema.index({ pullRequest: 1, status: 1 });
 AIReviewSchema.index({ 'comments.severity': 1 });
 AIReviewSchema.index({ createdAt: -1 });
-AIReviewSchema.index({ 'metadata.memoryUsage.memoryRetrieved': 1 });
-AIReviewSchema.index({ 'metadata.memoryUsage.memorySnippetsUsed': 1 });
 
 export const AIReview = mongoose.model<IAIReview>('AIReview', AIReviewSchema);

@@ -1,7 +1,7 @@
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from 'octokit';
 import { Installation } from '../models/installation';
-import { StructuredAIReview, ReviewComment } from './schema-validation';
+import { StructuredAIReview, ReviewComment } from '../types';
 
 export interface PRContext {
   repo: string;

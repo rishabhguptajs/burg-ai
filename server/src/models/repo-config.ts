@@ -1,5 +1,4 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { MemorySettings } from '../types/mem0Types';
 
 export interface IRepoConfig extends Document {
   repoId: number;
@@ -33,8 +32,6 @@ export interface IRepoConfig extends Document {
     };
   };
 
-  memorySettings: MemorySettings;
-
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,7 +62,7 @@ const RepoConfigSchema: Schema = new Schema({
   },
 
   aiSettings: {
-    model: { type: String, default: 'x-ai/grok-4-fast:free' },
+    model: { type: String, default: 'openai/gpt-oss-20b:free' },
     temperature: { type: Number, min: 0, max: 2, default: 0.1 },
     maxTokens: { type: Number, min: 1000, max: 8000, default: 4000 },
     customPrompts: {

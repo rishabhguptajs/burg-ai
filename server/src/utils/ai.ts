@@ -17,7 +17,7 @@ export type AIReviewResponse = z.infer<typeof AIReviewSchema>;
 
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const MODEL = 'x-ai/grok-4-fast:free';
+const MODEL = 'openai/gpt-oss-20b:free';
 
 /**
  * Generate AI-powered PR review using OpenRouter API - Returns EVERYTHING as JSON

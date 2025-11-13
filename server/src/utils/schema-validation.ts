@@ -43,11 +43,12 @@ const reviewCommentSchema = {
     },
     suggestion: {
       type: 'string',
-      maxLength: 2000,
-      description: 'Optional concrete code suggestion or approach to fix the issue'
+      minLength: 20,
+      maxLength: 3000,
+      description: 'GitHub suggestion block with triple backticks containing before/after code'
     }
   },
-  required: ['filePath', 'line', 'severity', 'message', 'rationale'],
+  required: ['filePath', 'line', 'severity', 'message', 'rationale', 'suggestion'],
   additionalProperties: false
 };
 
