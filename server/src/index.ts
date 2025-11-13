@@ -7,34 +7,10 @@ import { notFoundHandler } from './middleware/notFoundHandler';
 import { errorHandler } from './middleware/errorHandler';
 import db from './config/db';
 import { initializeQueue, shutdownQueue } from './utils/queue';
-import mem0Service from './utils/mem0';
 
 dotenv.config();
 
 db.connect();
-
-// Initialize Mem0 service
-if (process.env.MEM0_API_KEY) {
-  try {
-    mem0Service.initialize({
-      apiKey: process.env.MEM0_API_KEY,
-      host: process.env.MEM0_HOST,
-      organizationName: process.env.MEM0_ORG_NAME,
-      projectName: process.env.MEM0_PROJECT_NAME,
-      organizationId: process.env.MEM0_ORG_ID,
-      projectId: process.env.MEM0_PROJECT_ID,
-    });
-
-    // Test connection in development
-    if (process.env.NODE_ENV === 'development') {
-      mem0Service.testConnection();
-    }
-  } catch (error) {
-    console.error('❌ Failed to initialize Mem0 service:', error);
-  }
-} else {
-  console.warn('⚠️  MEM0_API_KEY not found in environment variables. Mem0 features will be disabled.');
-}
 
 const queue = initializeQueue();
 
