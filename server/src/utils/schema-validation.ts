@@ -101,9 +101,7 @@ const structuredAIReviewSchema = {
 const validateReviewComment = ajv.compile(reviewCommentSchema);
 const validateStructuredAIReview = ajv.compile(structuredAIReviewSchema);
 
-/**
- * Validate a single review comment
- */
+
 export function validateReviewCommentData(data: unknown): { isValid: boolean; errors?: string[]; comment?: ReviewComment } {
   const valid = validateReviewComment(data);
 
@@ -119,9 +117,7 @@ export function validateReviewCommentData(data: unknown): { isValid: boolean; er
   return { isValid: true, comment: data as unknown as ReviewComment };
 }
 
-/**
- * Validate complete AI review response
- */
+
 export function validateStructuredAIReviewData(data: unknown): { isValid: boolean; errors?: string[]; review?: StructuredAIReview } {
   const valid = validateStructuredAIReview(data);
 
@@ -154,9 +150,7 @@ export function validateStructuredAIReviewData(data: unknown): { isValid: boolea
   return { isValid: true, review };
 }
 
-/**
- * Get severity classification rules
- */
+
 export function getSeverityClassification(): Record<string, 'critical' | 'major' | 'minor'> {
   return {
     security: 'critical',
@@ -194,9 +188,7 @@ export function getSeverityClassification(): Record<string, 'critical' | 'major'
   };
 }
 
-/**
- * Classify issue severity based on keywords in the message
- */
+
 export function classifySeverity(message: string, rationale: string): 'critical' | 'major' | 'minor' {
   const text = `${message} ${rationale}`.toLowerCase();
   const classifications = getSeverityClassification();
@@ -216,9 +208,7 @@ export function classifySeverity(message: string, rationale: string): 'critical'
   return 'minor';
 }
 
-/**
- * Create a fallback review comment when validation fails
- */
+
 export function createFallbackComment(
   filePath: string,
   line: number,

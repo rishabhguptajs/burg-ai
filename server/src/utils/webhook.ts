@@ -1,9 +1,7 @@
 import crypto from 'crypto';
 import { GitHubWebhookJob } from '../types';
 
-/**
- * Verifies the HMAC signature of a GitHub webhook payload
- */
+
 export function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
   if (!signature) return false;
 
@@ -14,9 +12,7 @@ export function verifyWebhookSignature(payload: string, signature: string, secre
   return crypto.timingSafeEqual(digest, checksum);
 }
 
-/**
- * Extracts job data from GitHub pull_request webhook payload
- */
+
 export function extractPullRequestJob(payload: any): GitHubWebhookJob | null {
   if (!payload.action || !payload.pull_request) return null;
 

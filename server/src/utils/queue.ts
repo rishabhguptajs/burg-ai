@@ -50,9 +50,7 @@ class PRReviewQueue {
     this.setupWorkerEventListeners();
   }
 
-  /**
-   * Process a PR review job
-   */
+  
   private async processPRReviewJob(job: Job<PRReviewJob>): Promise<void> {
     const { jobId, installationId, repoFullName, prNumber, headSha, action } = job.data;
 
@@ -115,9 +113,7 @@ class PRReviewQueue {
     }
   }
 
-  /**
-   * Process PR review by fetching data from GitHub and performing analysis
-   */
+  
   private async performPRReview(data: Omit<PRReviewJob, 'jobId'>): Promise<void> {
     const { installationId, repoFullName, prNumber, headSha, action } = data;
 
@@ -324,9 +320,7 @@ class PRReviewQueue {
     }
   }
 
-  /**
-   * Setup queue event listeners for monitoring
-   */
+  
   private setupEventListeners(): void {
     this.queueEvents.on('waiting', ({ jobId }) => {
       console.log(`⏳ Job ${jobId} is waiting in queue`);
@@ -349,9 +343,7 @@ class PRReviewQueue {
     });
   }
 
-  /**
-   * Setup worker event listeners
-   */
+  
   private setupWorkerEventListeners(): void {
     this.worker.on('completed', (job) => {
       console.log(`🎉 Worker completed job ${job.id}`);
@@ -366,9 +358,7 @@ class PRReviewQueue {
     });
   }
 
-  /**
-   * Add a job to the queue
-   */
+  
   async addJob(jobData: PRReviewJob): Promise<Job<PRReviewJob>> {
     try {
       const job = await this.queue.add('processPR', jobData, {
@@ -384,9 +374,7 @@ class PRReviewQueue {
     }
   }
 
-  /**
-   * Get job priority based on action type
-   */
+  
   private getJobPriority(action: string): number {
     switch (action) {
       case 'opened':
@@ -400,9 +388,7 @@ class PRReviewQueue {
     }
   }
 
-  /**
-   * Get queue statistics
-   */
+  
   async getStats(): Promise<{
     waiting: number;
     active: number;
@@ -427,9 +413,7 @@ class PRReviewQueue {
     };
   }
 
-  /**
-   * Health check for queue connectivity
-   */
+  
   async healthCheck(): Promise<{ isHealthy: boolean; details: any }> {
     try {
       await this.queue.getWaiting();
@@ -445,9 +429,7 @@ class PRReviewQueue {
     }
   }
 
-  /**
-   * Gracefully close the queue and worker
-   */
+  
   async close(): Promise<void> {
     console.log('🛑 Closing PR Review Queue...');
     await this.worker.close();
@@ -459,9 +441,7 @@ class PRReviewQueue {
 
 let prReviewQueue: PRReviewQueue | null = null;
 
-/**
- * Get the PR review queue instance (singleton)
- */
+
 export function getPRReviewQueue(): PRReviewQueue {
   if (!prReviewQueue) {
     prReviewQueue = new PRReviewQueue();
@@ -469,17 +449,13 @@ export function getPRReviewQueue(): PRReviewQueue {
   return prReviewQueue;
 }
 
-/**
- * Initialize the queue system
- */
+
 export function initializeQueue(): PRReviewQueue {
   console.log('🚀 Initializing PR Review Queue System...');
   return getPRReviewQueue();
 }
 
-/**
- * Gracefully shutdown the queue system
- */
+
 export async function shutdownQueue(): Promise<void> {
   if (prReviewQueue) {
     await prReviewQueue.close();
