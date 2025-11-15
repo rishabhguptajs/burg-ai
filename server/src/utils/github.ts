@@ -53,8 +53,6 @@ function getGitHubAppAuth() {
 
 async function getInstallationToken(installationId: number): Promise<string> {
   try {
-    console.log(`🔑 Fetching installation token for installation ${installationId}`);
-
     const installation = await Installation.findOne({ installationId });
 
     if (installation && installation.accessToken && installation.accessTokenExpiresAt) {
@@ -62,14 +60,9 @@ async function getInstallationToken(installationId: number): Promise<string> {
       const expiresAt = new Date(installation.accessTokenExpiresAt);
 
       if (expiresAt > now) {
-        console.log(`✅ Found valid stored token for installation ${installationId} (expires: ${expiresAt.toISOString()})`);
         return installation.accessToken;
-      } else {
-        console.log(`⏰ Stored token expired for installation ${installationId}, generating new one`);
       }
     }
-
-    console.log(`⚠️ No valid stored token found, generating new token for ${installationId}`);
 
     const auth = getGitHubAppAuth();
 
@@ -95,7 +88,6 @@ async function getInstallationToken(installationId: number): Promise<string> {
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Successfully obtained and stored new token for ${installationId} (expires: ${expiresAt.toISOString()})`);
     return installationAuth.token;
   } catch (error) {
     console.error(`❌ Failed to get installation token for ${installationId}:`, error);
@@ -117,9 +109,6 @@ async function fetchPRData(
   prNumber: number
 ): Promise<PRContext> {
   try {
-    console.log(`📥 Fetching PR data for ${repoFullName}#${prNumber}`);
-    console.log(`🔍 Octokit instance received:`, !!octokit, typeof octokit);
-
     const [owner, repo] = repoFullName.split('/');
 
     const { data: pr } = await octokit.rest.pulls.get({
@@ -150,7 +139,6 @@ async function fetchPRData(
       changedFiles,
     };
 
-    console.log(`✅ Successfully fetched PR data: ${pr.title} (${changedFiles.length} files changed)`);
     return prContext;
 
   } catch (error) {
@@ -170,17 +158,13 @@ export async function processPRReviewJob(jobData: {
 }): Promise<PRContext> {
   const { jobId, installationId, repoFullName, prNumber, action } = jobData;
 
-  console.log(`🚀 Starting PR review job: ${jobId} - ${repoFullName}#${prNumber} (${action})`);
-
   try {
     const token = await getInstallationToken(installationId);
 
     const octokit = createOctokitWithToken(token);
-    console.log(`🔧 Created Octokit instance:`, !!octokit, typeof octokit);
 
     const prContext = await fetchPRData(octokit, repoFullName, prNumber);
 
-    console.log(`🎉 Successfully processed PR review job: ${jobId}`);
     return prContext;
 
   } catch (error) {
@@ -194,8 +178,6 @@ export function validateGitHubAppConfig(): { isValid: boolean; errors: string[] 
   const errors: string[] = [];
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = process.env.GITHUB_PRIVATE_KEY;
-
-  console.log(appId, privateKey);
 
   if (!appId) {
     errors.push('GITHUB_APP_ID environment variable is required');
@@ -295,7 +277,6 @@ export async function postAIReviewToGitHub(
   prNumber: number,
   aiReview: AIReview
 ): Promise<void> {
-  console.log(`📝 Starting to post AI review to GitHub: ${repoFullName}#${prNumber}`);
 
   try {
     const token = await getInstallationToken(installationId);
@@ -314,8 +295,6 @@ export async function postAIReviewToGitHub(
     const hasHighSeverity = aiReview.comments.some(comment => comment.severity === 'high');
 
     const event = (hasHighSeverity && !isSelfReview) ? 'REQUEST_CHANGES' : 'COMMENT';
-
-    console.log(`🔍 Review event: ${event} (${hasHighSeverity ? 'has high severity issues' : 'no high severity issues'}${isSelfReview ? ', self-review (using COMMENT)' : ''})`);
 
     let reviewBody = `## AI Code Review Summary\n\n${aiReview.summary}\n\n`;
 
@@ -337,10 +316,7 @@ export async function postAIReviewToGitHub(
       event: event as 'COMMENT' | 'REQUEST_CHANGES'
     });
 
-    console.log(`✅ Successfully posted AI review to ${repoFullName}#${prNumber} (${aiReview.comments.length} comments)`);
-
     if (aiReview.comments.length > 0) {
-      console.log(`💬 Posting ${aiReview.comments.length} inline comments with production diff position mapping...`);
 
 
       const filesToComment = [...new Set(aiReview.comments.map(c => c.filePath))];
@@ -376,7 +352,7 @@ export async function postAIReviewToGitHub(
                 side: 'RIGHT'
               });
 
-              console.log(`✅ Posted inline comment on ${filePath}:${comment.line}`);
+              // Comment posted successfully
             } catch (commentError) {
               console.error(`❌ Failed to post inline comment on ${filePath}:${comment.line}:`, commentError);
             }
@@ -386,8 +362,6 @@ export async function postAIReviewToGitHub(
           console.error(`❌ Failed to process comments for file ${filePath}:`, fileError);
         }
       }
-
-      console.log(`✅ Finished posting inline comments`);
     }
 
   } catch (error) {
@@ -408,8 +382,6 @@ export async function postStructuredAIReviewToGitHub(
   prNumber: number,
   aiReview: StructuredAIReview
 ): Promise<void> {
-  console.log(`📝 Starting to post structured AI review to GitHub: ${repoFullName}#${prNumber}`);
-
   try {
     const token = await getInstallationToken(installationId);
     const octokit = createOctokitWithToken(token);
@@ -429,8 +401,6 @@ export async function postStructuredAIReviewToGitHub(
     if ((hasHighSeverity || hasMajorSeverity) && !isSelfReview) {
       event = 'REQUEST_CHANGES';
     }
-
-    console.log(`🔍 Structured review event: ${event} (${hasHighSeverity ? 'has critical issues' : hasMajorSeverity ? 'has major issues' : 'only minor issues'}${isSelfReview ? ', self-review (using COMMENT)' : ''})`);
 
     let reviewBody = `## 🤖 AI Code Review Summary\n\n${aiReview.summary}\n\n`;
 
@@ -492,10 +462,7 @@ export async function postStructuredAIReviewToGitHub(
       event: event as 'COMMENT' | 'REQUEST_CHANGES'
     });
 
-    console.log(`✅ Successfully posted structured AI review to ${repoFullName}#${prNumber} (${aiReview.comments.length} comments)`);
-
     if (aiReview.comments.length > 0) {
-      console.log(`💬 Posting ${aiReview.comments.length} structured inline comments...`);
 
       for (const comment of aiReview.comments) {
         try {
@@ -510,13 +477,11 @@ export async function postStructuredAIReviewToGitHub(
             side: 'RIGHT'
           });
 
-          console.log(`✅ Posted structured inline comment on ${comment.filePath}:${comment.line}`);
+          // Structured comment posted successfully
         } catch (commentError) {
           console.error(`❌ Failed to post structured inline comment on ${comment.filePath}:${comment.line}:`, commentError);
         }
       }
-
-      console.log(`✅ Completed posting structured inline comments`);
     }
 
   } catch (error) {

@@ -121,13 +121,6 @@ export class GeminiLLMService {
       throw new Error(`Gemini LLM configuration invalid: ${configValidation.errors.join(', ')}`);
     }
 
-    console.log('🤖 Starting Gemini AI PR review generation:', {
-      repo: prContext.repo,
-      prNumber: prContext.prNumber,
-      filesChanged: prContext.changedFiles.length,
-      model: this.getPrimaryModel(),
-      timestamp: new Date().toISOString()
-    });
 
     const prompt = GeminiReviewPrompts.createPRReviewPrompt(prContext);
     const requestTimestamp = new Date().toISOString();
@@ -185,7 +178,6 @@ export class GeminiLLMService {
         throw new Error('No response received from Gemini model');
       }
 
-      console.log('✅ Gemini response received, validating...');
 
       let parsedJson: unknown;
       try {
@@ -207,7 +199,6 @@ export class GeminiLLMService {
         } else {
           parsedResponse = validationResult.data;
           validationErrors = null;
-          console.log('✅ Gemini response validation successful');
         }
       }
 
@@ -245,14 +236,6 @@ export class GeminiLLMService {
       }
     };
 
-    console.log('📊 Complete Gemini interaction summary:', {
-      success: completeResponse.metadata.success,
-      apiCallDuration: `${apiCallDuration}ms`,
-      totalDuration: `${totalDuration}ms`,
-      responseLength: rawResponse.length,
-      parsedSuccessfully: parsedResponse !== null,
-      validationErrors: validationErrors?.length || 0
-    });
 
     return completeResponse;
   }
@@ -297,13 +280,6 @@ export class GeminiLLMService {
       throw new Error(`Gemini LLM configuration invalid: ${configValidation.errors.join(', ')}`);
     }
 
-    console.log('🤖 Starting enhanced Gemini AI PR review generation:', {
-      repo: prContext.repo,
-      prNumber: prContext.prNumber,
-      filesChanged: prContext.changedFiles.length,
-      model: this.getPrimaryModel(),
-      timestamp: new Date().toISOString()
-    });
 
     // Use provided prompt or create default one
     const prompt = options.promptBuilder?.buildReviewPrompt ?
@@ -377,7 +353,6 @@ export class GeminiLLMService {
           throw new Error('No response received from Gemini model');
         }
 
-        console.log(`✅ Gemini response received (attempt ${attempt + 1})`);
 
         let parsedJson: unknown;
         try {
@@ -385,7 +360,6 @@ export class GeminiLLMService {
           parsedJson = JSON.parse(rawResponse);
           processingTimeMs = Date.now() - apiCallStart;
         } catch (parseError) {
-          console.log(`⚠️ Direct JSON parse failed, attempting extraction...`);
 
           // Try to extract JSON from corrupted response
           const extractedJson = this.extractValidJson(rawResponse);
@@ -393,13 +367,11 @@ export class GeminiLLMService {
             try {
               parsedJson = JSON.parse(extractedJson);
               processingTimeMs = Date.now() - apiCallStart;
-              console.log(`✅ Successfully extracted valid JSON from corrupted response`);
             } catch (extractError) {
               console.error('❌ Failed to parse extracted JSON:', extractedJson.substring(0, 200));
               validationErrors = [`Failed to parse extracted JSON: ${extractError instanceof Error ? extractError.message : 'Unknown error'}`];
 
               if (attempt < this.MAX_RETRIES) {
-                console.log(`🔄 Retrying after JSON extraction failure...`);
                 const delayMs = this.RETRY_DELAY_MS * Math.pow(2, attempt);
                 await this.delay(delayMs);
                 continue;
@@ -411,7 +383,6 @@ export class GeminiLLMService {
             validationErrors = [`Failed to parse as JSON: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`];
 
             if (attempt < this.MAX_RETRIES) {
-              console.log(`🔄 Retrying after JSON parse failure...`);
               const delayMs = this.RETRY_DELAY_MS * Math.pow(2, attempt);
               await this.delay(delayMs);
               continue;
@@ -429,12 +400,10 @@ export class GeminiLLMService {
 
           // Try to fix common issues and retry
           if (attempt < this.MAX_RETRIES) {
-            console.log(`🔄 Retrying after validation failure (attempt ${attempt + 1}/${this.MAX_RETRIES})...`);
             const delayMs = this.RETRY_DELAY_MS * Math.pow(2, Math.min(attempt, 3));
             await this.delay(delayMs);
             continue;
           } else {
-            console.log('⚠️ Max retries reached, generating fallback comments...');
             fallbackComments = this.generateFallbackComments(rawResponse, prContext);
           }
         } else {
@@ -445,7 +414,6 @@ export class GeminiLLMService {
             comments: aiReview.comments.map(comment => this.validateAndRepairComment(comment))
           };
           validationErrors = null;
-          console.log('✅ Gemini response validation successful');
           break;
         }
 
@@ -466,7 +434,6 @@ export class GeminiLLMService {
           // Handle rate limiting (429) with aggressive exponential backoff
           if (status === 429 && attempt < this.MAX_RATE_LIMIT_RETRIES) {
             const backoffDelay = this.RATE_LIMIT_BACKOFF_MS * Math.pow(2, attempt);
-            console.log(`⏳ Rate limited (429). Retrying after ${backoffDelay}ms (attempt ${attempt + 1}/${this.MAX_RATE_LIMIT_RETRIES})...`);
             await this.delay(backoffDelay);
             continue;
           }
@@ -474,7 +441,6 @@ export class GeminiLLMService {
           // Handle timeout and other transient errors with exponential backoff
           if ((status === 503 || status === 502 || status === 500) && attempt < this.MAX_RETRIES) {
             const delayMs = this.RETRY_DELAY_MS * Math.pow(2, Math.min(attempt, 3));
-            console.log(`⏳ Server error (${status}). Retrying after ${delayMs}ms (attempt ${attempt + 1}/${this.MAX_RETRIES})...`);
             await this.delay(delayMs);
             continue;
           }
@@ -484,7 +450,6 @@ export class GeminiLLMService {
           // Retry for empty responses, timeouts, and other non-API errors
           if (attempt < this.MAX_RETRIES) {
             const delayMs = this.RETRY_DELAY_MS * Math.pow(2, Math.min(attempt, 3));
-            console.log(`🔄 Empty response, timeout, or general error. Retrying after ${delayMs}ms (attempt ${attempt + 1}/${this.MAX_RETRIES + 1})...`);
             await this.delay(delayMs);
             continue;
           }
@@ -521,16 +486,6 @@ export class GeminiLLMService {
       }
     };
 
-    console.log('📊 Enhanced Gemini review completion summary:', {
-      success: completeResponse.metadata.success,
-      apiCallDuration: `${apiCallDuration}ms`,
-      totalDuration: `${totalDuration}ms`,
-      responseLength: rawResponse.length,
-      parsedSuccessfully: parsedResponse !== null,
-      validationErrors: validationErrors?.length || 0,
-      finalCommentsCount: completeResponse.metadata.finalCommentsCount,
-      retriesUsed: retryCount
-    });
 
     return completeResponse;
   }
@@ -547,7 +502,6 @@ export class GeminiLLMService {
     }
 
     try {
-      console.log('🧪 Testing Gemini API connection...');
 
       const response = await getGeminiClient().chat.completions.create({
         model: this.getPrimaryModel(),
@@ -556,7 +510,6 @@ export class GeminiLLMService {
       });
 
       if (response) {
-        console.log('✅ Gemini API connection successful');
         return { isValid: true, errors: [] };
       } else {
         errors.push('API returned empty response');
@@ -748,7 +701,6 @@ export class GeminiLLMService {
     const lastCloseBraceIndex = cleaned.lastIndexOf('}');
 
     if (openBraceIndex === -1 || lastCloseBraceIndex === -1) {
-      console.log('❌ No JSON object delimiters found in response');
       return null;
     }
 
@@ -765,7 +717,6 @@ export class GeminiLLMService {
       JSON.parse(jsonString);
       return jsonString;
     } catch (e) {
-      console.log('⚠️ Extracted JSON is still invalid, attempting repairs...');
 
       // Fix missing quotes around keys
       jsonString = jsonString.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
@@ -793,7 +744,6 @@ export class GeminiLLMService {
         JSON.parse(jsonString);
         return jsonString;
       } catch (finalError) {
-        console.log('❌ Final JSON repair failed, attempting manual reconstruction...');
         return this.reconstructJsonFromFragments(response);
       }
     }

@@ -48,8 +48,6 @@ class PRReviewQueue {
   private async processPRReviewJob(job: Job<PRReviewJob>): Promise<void> {
     const { jobId, installationId, repoFullName, prNumber, headSha, action } = job.data;
 
-    console.log(`🔄 Starting PR review job: ${jobId} - ${repoFullName}#${prNumber} (${action})`);
-
     let queueTask: any = null;
 
     try {
@@ -76,8 +74,6 @@ class PRReviewQueue {
         }
       );
 
-      console.log(`📋 QueueTask created/updated: ${queueTask._id}`);
-
       await this.performPRReview({
         installationId,
         repoFullName,
@@ -90,8 +86,6 @@ class PRReviewQueue {
         status: 'completed',
         error: undefined
       });
-
-      console.log(`✅ Completed PR review job: ${jobId} - ${repoFullName}#${prNumber}`);
 
     } catch (error) {
       console.error(`❌ Failed PR review job: ${jobId} - ${repoFullName}#${prNumber}`, error);
@@ -121,8 +115,6 @@ class PRReviewQueue {
 
       switch (action) {
         case 'opened':
-          console.log(`📝 Processing opened PR: ${repoFullName}#${prNumber}`);
-
           const prContext = await processPRReviewJob({
             jobId: crypto.randomUUID(),
             installationId,
@@ -132,26 +124,12 @@ class PRReviewQueue {
             action,
           });
 
-          console.log(`📊 PR Context fetched:`, {
-            title: prContext.title,
-            filesChanged: prContext.changedFiles.length,
-            totalAdditions: prContext.changedFiles.reduce((sum, f) => sum + f.additions, 0),
-            totalDeletions: prContext.changedFiles.reduce((sum, f) => sum + f.deletions, 0),
-          });
-
           const [owner, repo] = repoFullName.split('/');
           const repoRecord = await PullRequest.findOne({ repoFullName, prNumber });
           const repoId = repoRecord?.repoId || 0;
 
           const { EnhancedAIReviewService: EnhancedReviewService } = await import('./enhanced-ai-review');
           const enhancedAIResponse = await EnhancedReviewService.generateEnhancedReview(prContext, repoId);
-
-          console.log(`🎯 Enhanced AI Review completed:`, {
-            success: enhancedAIResponse.metadata.success,
-            commentsCount: enhancedAIResponse.response.parsed?.comments.length || 0,
-            validationErrors: enhancedAIResponse.response.validationErrors?.length || 0,
-            retriesUsed: enhancedAIResponse.response.retryCount
-          });
 
           let aiReviewRecord: any = null;
           if (enhancedAIResponse.response.parsed || enhancedAIResponse.response.fallbackComments.length > 0) {
@@ -189,8 +167,6 @@ class PRReviewQueue {
               await PullRequest.findByIdAndUpdate(prRecord._id, {
                 $push: { aiReviews: aiReviewRecord._id }
               });
-
-              console.log(`💾 Enhanced AI Review stored in database: ${aiReviewRecord._id}`);
             }
           }
 
@@ -212,8 +188,6 @@ class PRReviewQueue {
           break;
 
         case 'synchronize':
-          console.log(`🔄 Processing updated PR: ${repoFullName}#${prNumber}`);
-
           const updatedPrContext = await processPRReviewJob({
             jobId: crypto.randomUUID(),
             installationId,
@@ -223,24 +197,12 @@ class PRReviewQueue {
             action,
           });
 
-          console.log(`📊 Updated PR Context:`, {
-            title: updatedPrContext.title,
-            filesChanged: updatedPrContext.changedFiles.length,
-          });
-
           const [updatedOwner, updatedRepo] = repoFullName.split('/');
           const updatedRepoRecord = await PullRequest.findOne({ repoFullName, prNumber });
           const updatedRepoId = updatedRepoRecord?.repoId || 0;
 
           const { EnhancedAIReviewService: UpdatedEnhancedReviewService } = await import('./enhanced-ai-review');
           const updatedEnhancedAIResponse = await UpdatedEnhancedReviewService.generateEnhancedReview(updatedPrContext, updatedRepoId);
-
-          console.log(`🔄 Updated Enhanced AI Review completed:`, {
-            success: updatedEnhancedAIResponse.metadata.success,
-            commentsCount: updatedEnhancedAIResponse.response.parsed?.comments.length || 0,
-            validationErrors: updatedEnhancedAIResponse.response.validationErrors?.length || 0,
-            retriesUsed: updatedEnhancedAIResponse.response.retryCount
-          });
 
           if (updatedEnhancedAIResponse.response.parsed || updatedEnhancedAIResponse.response.fallbackComments.length > 0) {
             const prRecord = await PullRequest.findOne({
@@ -277,8 +239,6 @@ class PRReviewQueue {
               await PullRequest.findByIdAndUpdate(prRecord._id, {
                 $push: { aiReviews: updatedAiReviewRecord._id }
               });
-
-              console.log(`💾 Updated Enhanced AI Review stored in database: ${updatedAiReviewRecord._id}`);
             }
           }
 
@@ -300,11 +260,10 @@ class PRReviewQueue {
           break;
 
         case 'closed':
-          console.log(`🔒 Processing closed PR: ${repoFullName}#${prNumber}`);
           break;
 
         default:
-          console.log(`📋 Processing PR ${action}: ${repoFullName}#${prNumber}`);
+          // Handle unknown action types silently
       }
 
     } catch (error) {
@@ -316,31 +275,18 @@ class PRReviewQueue {
 
   
   private setupEventListeners(): void {
-    this.queueEvents.on('waiting', ({ jobId }) => {
-      console.log(`⏳ Job ${jobId} is waiting in queue`);
-    });
-
-    this.queueEvents.on('active', ({ jobId, prev }) => {
-      console.log(`🚀 Job ${jobId} started processing`);
-    });
-
-    this.queueEvents.on('completed', ({ jobId, returnvalue }) => {
-      console.log(`✅ Job ${jobId} completed successfully`);
-    });
-
-    this.queueEvents.on('failed', ({ jobId, failedReason }) => {
-      console.log(`❌ Job ${jobId} failed: ${failedReason}`);
-    });
-
-    this.queueEvents.on('stalled', ({ jobId }) => {
-      console.log(`⚠️ Job ${jobId} stalled`);
-    });
+    // Queue event listeners for monitoring - keeping them silent for production
+    this.queueEvents.on('waiting', () => {});
+    this.queueEvents.on('active', () => {});
+    this.queueEvents.on('completed', () => {});
+    this.queueEvents.on('failed', () => {});
+    this.queueEvents.on('stalled', () => {});
   }
 
   
   private setupWorkerEventListeners(): void {
-    this.worker.on('completed', (job) => {
-      console.log(`🎉 Worker completed job ${job.id}`);
+    this.worker.on('completed', () => {
+      // Job completion logged silently
     });
 
     this.worker.on('failed', (job, err) => {
@@ -360,7 +306,6 @@ class PRReviewQueue {
         priority: this.getJobPriority(jobData.action),
       });
 
-      console.log(`📋 Added job ${jobData.jobId} to queue for ${jobData.repoFullName}#${jobData.prNumber}`);
       return job;
     } catch (error) {
       console.error('Error adding job to queue:', error);

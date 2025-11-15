@@ -74,7 +74,6 @@ router.post('/github', async (req: Request, res: Response) => {
     }
 
     if (event !== 'pull_request') {
-      console.log('⚠️ Ignoring non-pull_request event:', event);
       return res.status(400).send('Unsupported event type');
     }
 
@@ -129,19 +128,8 @@ router.post('/github', async (req: Request, res: Response) => {
       }
     );
 
-    console.log(`📋 PullRequest record ${prRecord.isNew ? 'created' : 'updated'}: ${job.repoFullName}#${job.prNumber}`);
-
     const queue = getPRReviewQueue();
     await queue.addJob(job);
-
-    console.log('📋 Job enqueued to pr-review-queue:', {
-      jobId: job.jobId,
-      installationId: job.installationId,
-      repoFullName: job.repoFullName,
-      prNumber: job.prNumber,
-      action: job.action,
-      headSha: job.headSha.substring(0, 8) + '...'
-    });
 
     return res.status(200).json({
       success: true,

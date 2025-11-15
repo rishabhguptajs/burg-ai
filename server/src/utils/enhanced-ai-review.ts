@@ -61,15 +61,6 @@ export class EnhancedAIReviewService {
 
     
     const repoStats = await HistoricalReviewService.getRepoStats(repoId);
-
-    console.log('🤖 Enhanced Gemini AI Review Context:', {
-      frameworks: frameworkInfo.frameworks,
-      languages: frameworkInfo.languages,
-      historicalReviewsCount: historicalReviews.length,
-      repoStats
-    });
-
-    
     const geminiResponse = await GeminiLLMService.generateEnhancedReview(prContext, repoId, {
       frameworkInfo,
       historicalReviews,
@@ -113,16 +104,6 @@ export class EnhancedAIReviewService {
       enhancedResponse.response.parsed.comments = finalComments;
     }
 
-    console.log('📊 Enhanced Gemini review completion summary:', {
-      success: enhancedResponse.metadata.success,
-      apiCallDuration: `${enhancedResponse.metadata.apiCallDuration}ms`,
-      totalDuration: `${enhancedResponse.metadata.totalDuration}ms`,
-      responseLength: enhancedResponse.response.raw.length,
-      parsedSuccessfully: enhancedResponse.response.parsed !== null,
-      validationErrors: enhancedResponse.response.validationErrors?.length || 0,
-      finalCommentsCount: finalComments.length,
-      retriesUsed: enhancedResponse.response.retryCount
-    });
 
     return enhancedResponse;
   }

@@ -38,13 +38,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('🔄 Processing GitHub App Installation:', {
-      installationId,
-      code: codeStr ? codeStr.substring(0, 10) + '...' : 'undefined',
-      state: stateStr,
-      timestamp: new Date().toISOString()
-    });
-
     const clientId = process.env.GITHUB_APP_CLIENT_ID;
     const clientSecret = process.env.GITHUB_APP_CLIENT_SECRET;
 
@@ -55,8 +48,6 @@ router.get('/callback', async (req: Request, res: Response) => {
         message: 'Server configuration error: GitHub App credentials missing'
       });
     }
-
-    console.log('🔑 Exchanging code for access token...');
 
     const tokenResponse = await axios.post(
       'https://github.com/login/oauth/access_token',
@@ -83,10 +74,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('✅ Access token obtained successfully');
-
-    console.log('💾 Storing installation in database...');
-
     const installation = await Installation.findOneAndUpdate(
       { installationId },
       {
@@ -104,12 +91,6 @@ router.get('/callback', async (req: Request, res: Response) => {
         setDefaultsOnInsert: true
       }
     );
-
-    console.log('✅ Installation stored successfully:', {
-      id: installation._id,
-      installationId: installation.installationId,
-      accessToken: access_token.substring(0, 10) + '...'
-    });
 
     return res.json({
       success: true,
