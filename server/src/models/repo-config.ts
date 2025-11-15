@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { getPrimaryLLMModel } from '../utils/model-config';
 
 export interface IRepoConfig extends Document {
   repoId: number;
@@ -62,7 +63,7 @@ const RepoConfigSchema: Schema = new Schema({
   },
 
   aiSettings: {
-    model: { type: String, default: 'openai/gpt-oss-20b:free' },
+    model: { type: String, default: getPrimaryLLMModel },
     temperature: { type: Number, min: 0, max: 2, default: 0.1 },
     maxTokens: { type: Number, min: 1000, max: 8000, default: 4000 },
     customPrompts: {
@@ -77,13 +78,9 @@ RepoConfigSchema.index({ owner: 1, repoId: 1 });
 
 export const RepoConfig = mongoose.model<IRepoConfig>('RepoConfig', RepoConfigSchema);
 
-/**
- * Service class for managing repository configurations
- */
+
 export class RepoConfigService {
-  /**
-   * Get or create default configuration for a repository
-   */
+  
   static async getOrCreateConfig(repoId: number, repoFullName: string): Promise<IRepoConfig> {
     try {
       const [owner] = repoFullName.split('/');
@@ -107,9 +104,7 @@ export class RepoConfigService {
     }
   }
 
-  /**
-   * Update repository configuration
-   */
+  
   static async updateConfig(
     repoId: number,
     updates: Partial<Omit<IRepoConfig, '_id' | 'createdAt' | 'updatedAt'>>
@@ -133,9 +128,7 @@ export class RepoConfigService {
     }
   }
 
-  /**
-   * Get effective thresholds for a repository (adaptive or manual)
-   */
+  
   static async getEffectiveThresholds(repoId: number): Promise<{
     ignoreMinorThreshold: number;
     ignoreMajorThreshold: number;
@@ -172,9 +165,7 @@ export class RepoConfigService {
     }
   }
 
-  /**
-   * Filter comments based on repository configuration
-   */
+  
   static async filterComments(
     comments: any[],
     repoId: number

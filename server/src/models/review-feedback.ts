@@ -62,13 +62,9 @@ ReviewFeedbackSchema.index({
 
 export const ReviewFeedback = mongoose.model<IReviewFeedback>('ReviewFeedback', ReviewFeedbackSchema);
 
-/**
- * Service class for managing review feedback
- */
+
 export class ReviewFeedbackService {
-  /**
-   * Record user feedback on a review comment
-   */
+  
   static async recordFeedback(
     repoId: number,
     prNumber: number,
@@ -107,9 +103,7 @@ export class ReviewFeedbackService {
     }
   }
 
-  /**
-   * Get feedback statistics for a repository
-   */
+  
   static async getRepoFeedbackStats(repoId: number): Promise<{
     totalActions: number;
     actionBreakdown: Record<string, number>;
@@ -157,9 +151,7 @@ export class ReviewFeedbackService {
     }
   }
 
-  /**
-   * Get feedback-based thresholds for severity filtering
-   */
+  
   static async getAdaptiveThresholds(repoId: number): Promise<{
     ignoreMinorThreshold: number;
     ignoreMajorThreshold: number;
