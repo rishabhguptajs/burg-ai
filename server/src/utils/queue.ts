@@ -4,6 +4,7 @@ import { QueueTask } from '../models/queuetask';
 import { PullRequest } from '../models/pr';
 import { AIReview } from '../models/review';
 import { PRReviewJob } from '../types';
+import { getRedisConfig } from './redis-config';
 
 class PRReviewQueue {
   private queue: Queue<PRReviewJob>;
@@ -11,18 +12,17 @@ class PRReviewQueue {
   private queueEvents: QueueEvents;
 
   constructor() {
+    const redisConfig = getRedisConfig();
+
     this.queue = new Queue<PRReviewJob>('pr-review-queue', {
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-      },
+      connection: redisConfig,
       defaultJobOptions: {
         removeOnComplete: 50,
-        removeOnFail: 100,  
-        attempts: 3,    
+        removeOnFail: 100,
+        attempts: 3,
         backoff: {
           type: 'exponential',
-          delay: 2000,     
+          delay: 2000,
         },
       },
     });
@@ -31,19 +31,13 @@ class PRReviewQueue {
       'pr-review-queue',
       this.processPRReviewJob.bind(this),
       {
-        connection: {
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-        },
+        connection: redisConfig,
         concurrency: 5,
       }
     );
 
     this.queueEvents = new QueueEvents('pr-review-queue', {
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
-      },
+      connection: redisConfig,
     });
 
     this.setupEventListeners();
