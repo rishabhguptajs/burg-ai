@@ -28,9 +28,7 @@ export interface AIReview {
   comments: AIReviewComment[];
 }
 
-/**
- * Get GitHub App authentication configuration
- */
+
 function getGitHubAppAuth() {
   const appId = process.env.GITHUB_APP_ID;
   const privateKey = process.env.GITHUB_PRIVATE_KEY;
@@ -52,10 +50,7 @@ function getGitHubAppAuth() {
   };
 }
 
-/**
- * Get installation access token for a specific installation
- * First tries to get from database, falls back to JWT authentication
- */
+
 async function getInstallationToken(installationId: number): Promise<string> {
   try {
     console.log(`🔑 Fetching installation token for installation ${installationId}`);
@@ -108,18 +103,14 @@ async function getInstallationToken(installationId: number): Promise<string> {
   }
 }
 
-/**
- * Create Octokit instance with installation token
- */
+
 function createOctokitWithToken(token: string): Octokit {
   return new Octokit({
     auth: token,
   });
 }
 
-/**
- * Fetch PR metadata and changed files from GitHub
- */
+
 async function fetchPRData(
   octokit: Octokit,
   repoFullName: string,
@@ -168,9 +159,7 @@ async function fetchPRData(
   }
 }
 
-/**
- * Process a PR review job by fetching data from GitHub
- */
+
 export async function processPRReviewJob(jobData: {
   jobId: string;
   installationId: number;
@@ -200,9 +189,7 @@ export async function processPRReviewJob(jobData: {
   }
 }
 
-/**
- * Validate GitHub App configuration
- */
+
 export function validateGitHubAppConfig(): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
   const appId = process.env.GITHUB_APP_ID;
@@ -228,10 +215,7 @@ export function validateGitHubAppConfig(): { isValid: boolean; errors: string[] 
   };
 }
 
-/**
- * Find the diff position for a specific line number in a Git diff patch
- * This is crucial for production systems to ensure comments appear on the correct lines
- */
+
 export function findDiffPosition(patch: string, targetLine: number): number | null {
   if (!patch) return null;
 
@@ -266,9 +250,7 @@ export function findDiffPosition(patch: string, targetLine: number): number | nu
   return findClosestAdditionLine(patch, targetLine);
 }
 
-/**
- * Fallback function to find the closest addition line when exact mapping fails
- */
+
 function findClosestAdditionLine(patch: string, targetLine: number): number | null {
   if (!patch) return null;
 
@@ -306,9 +288,7 @@ function findClosestAdditionLine(patch: string, targetLine: number): number | nu
   return closestDistance <= 5 ? closestPosition : null;
 }
 
-/**
- * Post AI review to GitHub pull request
- */
+
 export async function postAIReviewToGitHub(
   installationId: number,
   repoFullName: string,
@@ -421,9 +401,7 @@ export async function postAIReviewToGitHub(
   }
 }
 
-/**
- * Post structured AI review to GitHub pull request with enhanced formatting
- */
+
 export async function postStructuredAIReviewToGitHub(
   installationId: number,
   repoFullName: string,

@@ -1,16 +1,12 @@
 import { AIReview } from '../models/review';
 
-/**
- * Service for retrieving historical review data to provide context for new reviews
- */
+
 export class HistoricalReviewService {
 
-  /**
-   * Get historical reviews for a repository to provide context
-   */
+  
   static async getHistoricalReviews(repoId: number, limit: number = 10): Promise<any[]> {
     try {
-      // Find all PRs for this repo and get their AI reviews
+      
       const historicalReviews = await AIReview
         .find({
           'pullRequest.repoId': repoId,
@@ -24,16 +20,14 @@ export class HistoricalReviewService {
         .limit(limit)
         .lean();
 
-      return historicalReviews.filter(review => review.pullRequest); // Filter out reviews without PR data
+      return historicalReviews.filter(review => review.pullRequest); 
     } catch (error) {
       console.error('Failed to fetch historical reviews:', error);
       return [];
     }
   }
 
-  /**
-   * Get common issues and patterns from historical reviews
-   */
+  
   static async getCommonPatterns(repoId: number, limit: number = 20): Promise<{
     securityIssues: Array<{ pattern: string; count: number; severity: string }>;
     performanceIssues: Array<{ pattern: string; count: number; severity: string }>;
@@ -62,7 +56,7 @@ export class HistoricalReviewService {
           const message = comment.message?.toLowerCase() || '';
           const key = this.normalizeMessage(message);
 
-          // Categorize by content
+          
           if (this.isSecurityRelated(message)) {
             const existing = securityPatterns.get(key) || { count: 0, severity: comment.severity };
             securityPatterns.set(key, {
@@ -91,7 +85,7 @@ export class HistoricalReviewService {
         }
       }
 
-      // Convert maps to arrays and sort by frequency
+      
       patterns.securityIssues = Array.from(securityPatterns.entries())
         .map(([pattern, data]) => ({ pattern, count: data.count, severity: data.severity }))
         .sort((a, b) => b.count - a.count)
@@ -124,9 +118,7 @@ export class HistoricalReviewService {
     }
   }
 
-  /**
-   * Get repository statistics for context
-   */
+  
   static async getRepoStats(repoId: number): Promise<{
     totalReviews: number;
     averageCommentsPerReview: number;
@@ -156,7 +148,7 @@ export class HistoricalReviewService {
         { critical: 0, major: 0, minor: 0 }
       );
 
-      // Calculate review frequency (simple heuristic)
+      
       let reviewFrequency = 'Unknown';
       if (reviews.length >= 2) {
         const sortedReviews = reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -188,12 +180,12 @@ export class HistoricalReviewService {
   }
 
   private static normalizeMessage(message: string): string {
-    // Normalize similar messages by removing specific details
+    
     return message
       .toLowerCase()
-      .replace(/\b\d+\b/g, 'N') // Replace numbers with N
-      .replace(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g, 'VAR') // Replace variable names
-      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/\b\d+\b/g, 'N') 
+      .replace(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g, 'VAR') 
+      .replace(/\s+/g, ' ') 
       .trim();
   }
 

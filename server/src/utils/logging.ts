@@ -37,9 +37,7 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-/**
- * Enhanced logging utility with structured logging and metrics
- */
+
 export class Logger {
   private static instance: Logger;
   private metrics: Map<string, { count: number; totalTime: number; errors: number }> = new Map();
@@ -51,9 +49,7 @@ export class Logger {
     return Logger.instance;
   }
 
-  /**
-   * Log AI review operations with structured data
-   */
+  
   aiReview(operation: string, data: {
     repoFullName?: string;
     prNumber?: number;
@@ -85,9 +81,7 @@ export class Logger {
     this.updateMetrics(`ai_review_${operation}`, data.duration || 0, !data.success);
   }
 
-  /**
-   * Log queue operations
-   */
+  
   queue(operation: string, data: {
     jobId?: string;
     repoFullName?: string;
@@ -117,9 +111,7 @@ export class Logger {
     this.updateMetrics(`queue_${operation}`, data.duration || 0, !data.success);
   }
 
-  /**
-   * Log GitHub API operations
-   */
+  
   github(operation: string, data: {
     repoFullName?: string;
     prNumber?: number;
@@ -149,9 +141,7 @@ export class Logger {
     this.updateMetrics(`github_${operation}`, data.duration || 0, !data.success);
   }
 
-  /**
-   * Log validation operations
-   */
+  
   validation(operation: string, data: {
     schema: string;
     success: boolean;
@@ -175,9 +165,7 @@ export class Logger {
     this.updateMetrics(`validation_${operation}`, data.duration || 0, !data.success);
   }
 
-  /**
-   * Log webhook events
-   */
+  
   webhook(event: string, data: {
     deliveryId?: string;
     repoFullName?: string;
@@ -207,9 +195,7 @@ export class Logger {
     this.updateMetrics(`webhook_${event}`, data.duration || 0, !data.success);
   }
 
-  /**
-   * Log performance metrics
-   */
+  
   performance(operation: string, duration: number, metadata?: Record<string, any>) {
     logger.info('Performance Metric', {
       operation,
@@ -220,9 +206,7 @@ export class Logger {
     this.updateMetrics(`perf_${operation}`, duration, false);
   }
 
-  /**
-   * Log errors with context
-   */
+  
   error(context: string, error: Error | string, metadata?: Record<string, any>) {
     const errorMessage = error instanceof Error ? error.message : error;
     const stack = error instanceof Error ? error.stack : undefined;
@@ -235,9 +219,7 @@ export class Logger {
     });
   }
 
-  /**
-   * Get current metrics
-   */
+  
   getMetrics(): Record<string, { count: number; avgTime: number; errorRate: number }> {
     const result: Record<string, { count: number; avgTime: number; errorRate: number }> = {};
 
@@ -252,16 +234,12 @@ export class Logger {
     return result;
   }
 
-  /**
-   * Reset metrics
-   */
+  
   resetMetrics(): void {
     this.metrics.clear();
   }
 
-  /**
-   * Update internal metrics
-   */
+  
   private updateMetrics(operation: string, duration: number, isError: boolean): void {
     const existing = this.metrics.get(operation) || { count: 0, totalTime: 0, errors: 0 };
 
@@ -275,9 +253,7 @@ export class Logger {
 
 export const appLogger = Logger.getInstance();
 
-/**
- * Error handling decorator for async functions
- */
+
 export function withErrorHandling<T extends any[], R>(
   fn: (...args: T) => Promise<R>,
   context: string
@@ -308,9 +284,7 @@ export function withErrorHandling<T extends any[], R>(
   };
 }
 
-/**
- * Retry utility with exponential backoff
- */
+
 export async function withRetry<T>(
   operation: () => Promise<T>,
   maxRetries: number = 3,
@@ -355,9 +329,7 @@ export async function withRetry<T>(
   throw lastError;
 }
 
-/**
- * Timeout wrapper for operations
- */
+
 export async function withTimeout<T>(
   operation: Promise<T>,
   timeoutMs: number,
