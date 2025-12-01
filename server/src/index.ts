@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { setupRoutes } from './routes/index';
 import { notFoundHandler } from './middleware/notFoundHandler';
@@ -18,6 +19,8 @@ const app = express();
 const PORT = process.env.PORT;
 
 app.use(helmet());
+
+app.use(morgan(':method :url :status :response-time ms - :res[content-length]'));
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
